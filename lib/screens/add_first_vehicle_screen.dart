@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../widgets/get_started_primary_button.dart';
 import 'add_new_vehicle_screen.dart';
-import 'home_screen.dart';
+import 'home_screen_wrapper.dart';
 
 class AddFirstVehicleScreen extends StatelessWidget {
   const AddFirstVehicleScreen({super.key});
@@ -12,13 +13,24 @@ class AddFirstVehicleScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
+      appBar: AppBar(
+        toolbarHeight: 0,
+        backgroundColor: const Color(0xFF111216),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF111216),
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
             const _TopHeader(),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                padding: const EdgeInsets.fromLTRB(1, 24, 16, 0),
                 child: Column(
                   children: const [
                     _BenefitTile(
@@ -91,7 +103,7 @@ class AddFirstVehicleScreen extends StatelessWidget {
 
   static void _goToHome(BuildContext context) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      MaterialPageRoute<void>(builder: (_) => const HomeScreenWrapper()),
     );
   }
 
@@ -221,7 +233,7 @@ class _TopHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 255,
+      height: 235,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -236,7 +248,7 @@ class _TopHeader extends StatelessWidget {
           ),
           Positioned(
             right: -90,
-            top: 18,
+            top: 5,
             child: Image.asset(
               'assets/images/registration_hero_car.png',
               width: 300,
@@ -247,7 +259,7 @@ class _TopHeader extends StatelessWidget {
           Positioned(
             left: 16,
             right: 16,
-            top: 24,
+            top: 12,
             child: IconButton(
               alignment: Alignment.centerLeft,
               padding: EdgeInsets.zero,

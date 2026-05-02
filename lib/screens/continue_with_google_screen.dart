@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -6,9 +5,9 @@ import '../widgets/get_started_primary_button.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import 'personal_details_screen.dart';
-import 'home_screen.dart';
+import 'home_screen_wrapper.dart';
 
-/// Registration entry screen that uses system browser for Google OAuth
+/// Registration entry screen — uses native Google Sign-In SDK.
 class ContinueWithGoogleScreen extends StatefulWidget {
   const ContinueWithGoogleScreen({super.key});
 
@@ -21,214 +20,84 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
   final AuthService _authService = AuthService();
   final ApiClient _apiClient = ApiClient();
   bool _isLoading = false;
-  StreamSubscription? _linkSubscription;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkInitialDeepLink();
-    _startListeningForCallback();
-  }
-
-  @override
-  void dispose() {
-    _linkSubscription?.cancel();
-    super.dispose();
-  }
-
-  /// Check if app was opened via deep link
-  Future<void> _checkInitialDeepLink() async {
-    final initialLink = await _authService.getInitialDeepLink();
-    debugPrint('OAUTH_DEBUG: initial deep link = $initialLink');
-    if (initialLink != null && mounted) {
-      await _handleCallback(initialLink.toString());
-    }
-  }
-
-  /// Start listening for deep link callbacks
-  void _startListeningForCallback() {
-    _authService.startListeningForCallback((uri) async {
-      debugPrint('OAUTH_DEBUG: stream callback uri = $uri');
-      if (uri != null && mounted) {
-        await _handleCallback(uri);
-      }
-    });
-  }
-
-  /// Handle OAuth callback
-  Future<void> _handleCallback(String uri) async {
-    if (!mounted) return;
-    debugPrint('OAUTH_DEBUG: _handleCallback entered with uri = $uri');
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final token = await _authService.extractTokenFromCallback(uri);
-      debugPrint(
-        'OAUTH_DEBUG: token extracted = ${token != null && token.isNotEmpty}',
-      );
-
-      if (token != null && token.isNotEmpty) {
-        // Debug aid: copy this value from Logcat using DEBUG_TOKEN filter.
-        debugPrint('DEBUG_TOKEN: $token');
-        // Save token first
-        await _authService.saveToken(token);
-
-        // Check if user has completed profile
-        try {
-          final userResponse = await _apiClient.getCurrentUser();
-          
-          if (!mounted) return;
-
-          // Check if user data exists and has required fields
-          final userData = userResponse['data'];
-          final bool isProfileComplete = userData != null &&
-              userData['firstname'] != null &&
-              userData['lastname'] != null &&
-              userData['email'] != null;
-
-          setState(() {
-            _isLoading = false;
-          });
-
-          if (isProfileComplete) {
-            // User has completed profile, go to home
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder<void>(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    const HomeScreen(),
-                transitionsBuilder: (
-                  context,
-                  animation,
-                  secondaryAnimation,
-                  child,
-                ) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            );
-          } else {
-            // User needs to complete profile
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder<void>(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    const PersonalDetailsScreen(),
-                transitionsBuilder: (
-                  context,
-                  animation,
-                  secondaryAnimation,
-                  child,
-                ) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            );
-          }
-        } catch (apiError) {
-          // If API call fails (401, network error, etc.), go to personal details
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-            });
-
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder<void>(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    const PersonalDetailsScreen(),
-                transitionsBuilder: (
-                  context,
-                  animation,
-                  secondaryAnimation,
-                  child,
-                ) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            );
-          }
-        }
-      } else {
-        debugPrint('OAUTH_DEBUG: token was null/empty');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          _showError('Failed to get authentication token');
-        }
-      }
-    } catch (e) {
-      debugPrint('OAUTH_DEBUG: callback exception = $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showError('Authentication failed: ${e.toString()}');
-      }
-    }
-  }
-
-  /// Handle Google sign-in button press
   Future<void> _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      final launched = await _authService.openGoogleAuthInBrowser();
-      debugPrint('OAUTH_DEBUG: browser launched = $launched');
+      // 1. Trigger native Google account picker and get id_token.
+      final idToken = await _authService.getGoogleIdToken();
 
-      if (!launched) {
+      if (idToken == null) {
+        // User cancelled the picker.
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      // 2. Exchange id_token for a backend JWT.
+      final jwtToken = await _apiClient.authenticateWithGoogleToken(idToken);
+
+      if (jwtToken == null || jwtToken.isEmpty) {
+        _showError('Authentication failed. Please try again.');
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      // 3. Persist the JWT.
+      await _authService.saveToken(jwtToken);
+
+      // 4. Decide where to navigate based on profile completeness.
+      if (!mounted) return;
+
+      try {
+        final userResponse = await _apiClient.getCurrentUser();
+        final userData = userResponse['data'];
+        final bool isProfileComplete = userData != null &&
+            userData['firstname'] != null &&
+            userData['lastname'] != null &&
+            userData['email'] != null;
+
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
+        _navigateTo(
+          isProfileComplete
+              ? const HomeScreenWrapper()
+              : const PersonalDetailsScreen(),
+        );
+      } catch (_) {
+        // If the profile check fails treat the user as new.
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          _showError('Failed to open browser for authentication');
-        }
-      } else {
-        // Keep loading state while waiting for callback
-        // The callback will handle state changes
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Complete sign-in in your browser'),
-              duration: Duration(seconds: 3),
-            ),
-          );
+          setState(() => _isLoading = false);
+          _navigateTo(const PersonalDetailsScreen());
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showError('Error: ${e.toString()}');
+        setState(() => _isLoading = false);
+        _showError('Sign-in error: ${e.toString()}');
       }
     }
   }
 
-  /// Show error message
+  void _navigateTo(Widget screen) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, __, ___) => screen,
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
   void _showError(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -260,14 +129,14 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'You will be redirected to your browser to complete sign-in',
+                        'Sign in with your Google account to get started',
                         style: GoogleFonts.dmSans(
                           color: const Color(0xFF888888),
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
                         ),
                       ),
-                      const SizedBox(height: 34),
+                      const Spacer(),
                       SafeArea(
                         top: false,
                         child: Padding(
@@ -275,8 +144,8 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
                           child: GetStartedPrimaryButton(
                             width: double.infinity,
                             height: 52,
-                            label: _isLoading 
-                                ? 'Signing in...' 
+                            label: _isLoading
+                                ? 'Signing in…'
                                 : 'Continue with Google',
                             enabled: !_isLoading,
                             onPressed: _handleGoogleSignIn,
@@ -291,24 +160,9 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withValues(alpha: 0.35),
               child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      color: Colors.white,
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Complete sign-in in your browser',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
+                child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
         ],
@@ -327,7 +181,9 @@ class _GoogleHeader extends StatelessWidget {
       child: DecoratedBox(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/images/registration_header_background.png'),
+            image: AssetImage(
+              'assets/images/registration_header_background.png',
+            ),
             fit: BoxFit.cover,
             alignment: Alignment.topLeft,
           ),

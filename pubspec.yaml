@@ -40,6 +40,7 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   url_launcher: ^6.2.5
   app_links: ^6.3.2
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +76,8 @@ flutter:
     - assets/images/home_btn_schedule_pickup.png
     - assets/images/home_promo_bg_custom.png
     - assets/images/home_promo_car_custom.png
+    - assets/images/no_vehicle_bg.png
+    - assets/images/no_vehicle_car.png
     - assets/images/bmwsvg.svg
     - assets/images/primary_button_bg.png
     - assets/images/add_new_vehicle_header_bg.png

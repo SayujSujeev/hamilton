@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'add_first_vehicle_screen.dart';
+import '../services/api_client.dart';
 import '../widgets/get_started_primary_button.dart';
 
 const Color _kRedAccent = Color(0xFFB71C1C);
@@ -30,6 +31,8 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
   bool _hasProfileImage = false;
+  bool _isSubmitting = false;
+  final ApiClient _apiClient = ApiClient();
 
   void _onFieldChanged() {
     if (mounted) setState(() {});
@@ -57,7 +60,47 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   bool get _canSubmit {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    return name.isNotEmpty && email.isNotEmpty && _emailOk.hasMatch(email);
+    return !_isSubmitting &&
+        name.isNotEmpty &&
+        email.isNotEmpty &&
+        _emailOk.hasMatch(email);
+  }
+
+  Future<void> _submit() async {
+    if (!_canSubmit) return;
+    setState(() => _isSubmitting = true);
+
+    final fullName = _nameController.text.trim();
+    final parts = fullName.split(RegExp(r'\s+'));
+    final firstname = parts.first;
+    final lastname = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+    final address = _addressController.text.trim();
+
+    try {
+      await _apiClient.updateCurrentUser({
+        'firstname': firstname,
+        if (lastname.isNotEmpty) 'lastname': lastname,
+        if (address.isNotEmpty) 'address': address,
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save profile: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => const AddFirstVehicleScreen(),
+      ),
+    );
   }
 
   void _onProfileImageTap() {
@@ -91,17 +134,9 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
           child: GetStartedPrimaryButton(
             width: buttonW,
             height: buttonH,
-            label: 'Create My Account',
+            label: _isSubmitting ? 'Saving…' : 'Create My Account',
             enabled: _canSubmit,
-            onPressed: _canSubmit
-                ? () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AddFirstVehicleScreen(),
-                      ),
-                    );
-                  }
-                : null,
+            onPressed: _canSubmit ? _submit : null,
           ),
         ),
       ),

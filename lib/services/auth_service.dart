@@ -1,185 +1,87 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
-import 'package:app_links/app_links.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
-  static const String _baseUrl = 'https://hamilton-be-dev.vercel.app';
-  static const String _authEndpoint = '/api/v1/auth/google';
-  static const String _callbackEndpoint = '/api/v1/auth/google/callback';
-  static const String _mobileRedirectUri = 'hamiltoncarservice://oauth';
   static const String _tokenKey = 'jwt_token';
-  
+
+  /// The OAuth 2.0 Web Client ID from Google Cloud Console.
+  /// Required so the Android/iOS SDK requests an id_token the backend can verify.
+  /// Replace this with your project's actual Web Client ID.
+  static const String _webClientId =
+      '1045447863619-3l1tg56ubovdlvur04hlh186htiqg5nh.apps.googleusercontent.com';
+
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
-  final AppLinks _appLinks = AppLinks();
-  StreamSubscription? _linkSubscription;
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _googleSignInInitialized = false;
 
-  /// Get the Google OAuth URL to initiate login
-  String getGoogleAuthUrl() {
-    final uri = Uri.parse('$_baseUrl$_authEndpoint').replace(
-      queryParameters: <String, String>{
-        // App redirect is for backend post-auth handoff to mobile.
-        // Do NOT overload OAuth's redirect_uri, which some backends pass to Google.
-        'app_redirect_uri': _mobileRedirectUri,
-      },
+  Future<void> _ensureGoogleSignInInitialized() async {
+    if (_googleSignInInitialized) return;
+    await _googleSignIn.initialize(
+      serverClientId: _webClientId,
     );
-    return uri.toString();
+    _googleSignInInitialized = true;
   }
 
-  /// Get the callback URL that Google will redirect to
-  String getCallbackUrl() {
-    return '$_baseUrl$_callbackEndpoint';
-  }
-
-  /// Open Google OAuth in system browser
-  Future<bool> openGoogleAuthInBrowser() async {
-    final url = Uri.parse(getGoogleAuthUrl());
-
+  /// Sign in with Google and return the id_token, or null if cancelled/failed.
+  Future<String?> getGoogleIdToken() async {
     try {
-      // Avoid canLaunchUrl() gate on Android 11+ where package visibility can
-      // report false even when a browser exists.
-      return await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
+      await _ensureGoogleSignInInitialized();
+
+      // Sign out first to always show the account picker.
+      await _googleSignIn.signOut();
+
+      final GoogleSignInAccount account = await _googleSignIn.authenticate(
+        scopeHint: const ['email', 'profile'],
       );
-    } catch (e) {
-      return false;
-    }
-  }
 
-  /// Listen for deep link callback
-  Stream<Uri> getDeepLinkStream() {
-    return _appLinks.uriLinkStream;
-  }
-
-  /// Get initial deep link (when app is opened via deep link)
-  Future<Uri?> getInitialDeepLink() async {
-    try {
-      return await _appLinks.getInitialLink();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Start listening for OAuth callback
-  void startListeningForCallback(Function(String?) onCallback) {
-    _linkSubscription?.cancel();
-    _linkSubscription = getDeepLinkStream().listen((uri) {
-      final uriString = uri.toString();
-      if (uriString.contains(_callbackEndpoint) ||
-          uriString.startsWith(_mobileRedirectUri)) {
-        onCallback(uriString);
+      final GoogleSignInAuthentication auth = account.authentication;
+      return auth.idToken;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return null;
       }
-    });
+      throw Exception('Google Sign-In failed: ${e.code.name} ${e.description}');
+    } catch (e) {
+      throw Exception('Google Sign-In failed: $e');
+    }
   }
 
-  /// Stop listening for callback
-  void stopListeningForCallback() {
-    _linkSubscription?.cancel();
-    _linkSubscription = null;
+  /// Sign out of Google.
+  Future<void> signOutGoogle() async {
+    await _ensureGoogleSignInInitialized();
+    await _googleSignIn.signOut();
   }
 
-  /// Save JWT token securely
+  /// Save JWT token securely.
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
   }
 
-  /// Get saved JWT token
+  /// Get saved JWT token.
   Future<String?> getToken() async {
     return await _storage.read(key: _tokenKey);
   }
 
-  /// Check if user is authenticated
+  /// Check if user is authenticated.
   Future<bool> isAuthenticated() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
   }
 
-  /// Clear stored token (logout)
+  /// Clear stored token (logout).
   Future<void> clearToken() async {
     await _storage.delete(key: _tokenKey);
   }
 
-  /// Verify token with backend (optional)
-  Future<bool> verifyToken() async {
+  /// Best-effort clear for Google account session.
+  Future<void> clearGoogleSession() async {
+    await _ensureGoogleSignInInitialized();
     try {
-      final token = await getToken();
-      if (token == null) return false;
-
-      // Add your token verification endpoint here if available
-      // Example:
-      // final response = await http.get(
-      //   Uri.parse('$_baseUrl/api/v1/auth/verify'),
-      //   headers: {'Authorization': 'Bearer $token'},
-      // );
-      // return response.statusCode == 200;
-
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Extract JWT token from callback response
-  Future<String?> extractTokenFromCallback(String url) async {
+      await _googleSignIn.signOut();
+    } catch (_) {}
     try {
-      // The callback should return JWT token
-      // If the token is in the URL, extract it
-      final uri = Uri.parse(url);
-      
-      // Check if token is in query parameters (various possible key names)
-      if (uri.queryParameters.containsKey('token')) {
-        return uri.queryParameters['token'];
-      }
-      if (uri.queryParameters.containsKey('access_token')) {
-        return uri.queryParameters['access_token'];
-      }
-      if (uri.queryParameters.containsKey('accessToken')) {
-        return uri.queryParameters['accessToken'];
-      }
-      if (uri.queryParameters.containsKey('jwt')) {
-        return uri.queryParameters['jwt'];
-      }
-
-      // If not in URL, make a request to the callback endpoint
-      // The API returns JSON with access_token
-      final response = await http.get(Uri.parse(url));
-      
-      if (response.statusCode == 200) {
-        // Try to parse JSON response
-        try {
-          final jsonResponse = json.decode(response.body);
-          // API documentation shows response format: {"access_token": "eyJhbGc..."}
-          if (jsonResponse.containsKey('access_token')) {
-            return jsonResponse['access_token'];
-          }
-          if (jsonResponse.containsKey('accessToken')) {
-            return jsonResponse['accessToken'];
-          }
-          if (jsonResponse.containsKey('token')) {
-            return jsonResponse['token'];
-          }
-          if (jsonResponse.containsKey('jwt')) {
-            return jsonResponse['jwt'];
-          }
-        } catch (_) {
-          // If not JSON, the token might be the direct response
-          return response.body;
-        }
-      }
-      
-      return null;
-    } catch (e) {
-      // Log error for debugging
-      // print('Error extracting token: $e');
-      return null;
-    }
-  }
-
-  /// Dispose resources
-  void dispose() {
-    stopListeningForCallback();
+      await _googleSignIn.disconnect();
+    } catch (_) {}
   }
 }

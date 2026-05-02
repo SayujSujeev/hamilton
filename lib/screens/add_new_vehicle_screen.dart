@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/api_client.dart';
+import '../utils/brand_display_name.dart';
 import '../widgets/get_started_primary_button.dart';
-import 'home_screen.dart';
+import 'home_screen_wrapper.dart';
 
 class AddNewVehicleScreen extends StatefulWidget {
   const AddNewVehicleScreen({super.key});
@@ -12,28 +14,47 @@ class AddNewVehicleScreen extends StatefulWidget {
   State<AddNewVehicleScreen> createState() => _AddNewVehicleScreenState();
 }
 
+class _BrandOption {
+  const _BrandOption({
+    required this.id,
+    required this.label,
+  });
+
+  final String id;
+  final String label;
+}
+
+class _ModelOption {
+  const _ModelOption({
+    required this.id,
+    required this.name,
+  });
+
+  final String id;
+  final String name;
+}
+
 class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
+  final ApiClient _apiClient = ApiClient();
   final _vehicleNumberController = TextEditingController();
   final _odometerController = TextEditingController();
 
   String? _selectedMake;
   String? _selectedModel;
+  String? _selectedModelId;
   String? _selectedYear;
   int? _selectedColorIndex;
+  bool _isSubmitting = false;
 
-  static const List<String> _makes = [
-    'BMW',
-    'MERCEDES-BENZ',
-    'AUDI',
-    'LEXUS',
-    'PORSCHE',
-    'JAGUAR',
-    'LAND ROVER',
-    'VOLVO',
-    'TOYOTA',
-    'NISSAN',
-  ];
-  static const List<String> _models = ['X5', 'X7', 'Cayenne', 'A6'];
+  List<_BrandOption> _brands = [];
+  List<String> _makes = [];
+  String? _selectedBrandId;
+  bool _isLoadingMakes = false;
+  String? _makeLoadError;
+  List<_ModelOption> _modelOptions = [];
+  List<String> _models = [];
+  bool _isLoadingModels = false;
+  String? _modelLoadError;
   static const List<String> _years = ['2026', '2025', '2024', '2023', '2022'];
   static const List<Color> _colors = [
     Color(0xFFF1ECE8),
@@ -53,9 +74,11 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
   ];
 
   bool get _canSubmit =>
+      !_isSubmitting &&
       _vehicleNumberController.text.trim().isNotEmpty &&
       _selectedMake != null &&
       _selectedModel != null &&
+      _selectedModelId != null &&
       _selectedYear != null &&
       _selectedColorIndex != null;
 
@@ -63,6 +86,7 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
   void initState() {
     super.initState();
     _vehicleNumberController.addListener(_refresh);
+    _loadBrands();
   }
 
   @override
@@ -88,7 +112,224 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
     return raw.replaceAll(' ', '').toUpperCase();
   }
 
+  Future<void> _loadBrands() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingMakes = true;
+        _makeLoadError = null;
+      });
+    }
+
+    try {
+      final rawList = await _apiClient.getBrands();
+
+      final brands = rawList
+          .map((item) {
+            final id = (item['id'] ?? '').toString().trim();
+            final shortForm = (item['short_form'] ?? '').toString().trim();
+            final name = (item['name'] ?? '').toString().trim();
+            final raw = shortForm.isNotEmpty ? shortForm : name;
+            final label = displayBrandNameForUi(raw);
+            return _BrandOption(id: id, label: label);
+          })
+          .where(
+            (brand) =>
+                brand.id.isNotEmpty &&
+                brand.label.isNotEmpty &&
+                brand.label != '—',
+          )
+          .toList()
+        ..sort((a, b) => a.label.compareTo(b.label));
+
+      if (!mounted) return;
+      setState(() {
+        _brands = brands;
+        _makes = brands.map((brand) => brand.label).toSet().toList()..sort();
+        if (_selectedMake != null && !_makes.contains(_selectedMake)) {
+          _selectedMake = null;
+          _selectedBrandId = null;
+        }
+        _isLoadingMakes = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMakes = false;
+        _makeLoadError = 'Could not load brands';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load brands: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _onMakeChanged(String? value) async {
+    final selected = _brands.where((brand) => brand.label == value);
+    final brandId = selected.isEmpty ? null : selected.first.id;
+    setState(() {
+      _selectedMake = value;
+      _selectedBrandId = brandId;
+      _selectedModel = null;
+      _selectedModelId = null;
+      _modelOptions = [];
+      _models = [];
+      _modelLoadError = null;
+    });
+
+    if (brandId != null) {
+      await _loadModelsForBrand(brandId);
+    }
+  }
+
+  Future<void> _loadModelsForBrand(String brandId) async {
+    if (mounted) {
+      setState(() {
+        _isLoadingModels = true;
+        _modelLoadError = null;
+      });
+    }
+
+    try {
+      final rawList = await _apiClient.getVehiclesByBrandId(brandId);
+
+      final options = rawList
+          .map((item) {
+            final id = (item['id'] ?? '').toString().trim();
+            final name = (item['name'] ?? '').toString().trim();
+            return _ModelOption(id: id, name: name);
+          })
+          .where((opt) => opt.id.isNotEmpty && opt.name.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+      final uniqueOptions = <String, _ModelOption>{};
+      for (final opt in options) {
+        uniqueOptions.putIfAbsent(opt.name, () => opt);
+      }
+      final dedupedOptions = uniqueOptions.values.toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+      if (!mounted) return;
+      setState(() {
+        _modelOptions = dedupedOptions;
+        _models = dedupedOptions.map((opt) => opt.name).toList();
+        _isLoadingModels = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingModels = false;
+        _modelLoadError = 'Could not load models';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load models: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildMakeField() {
+    if (_isLoadingMakes) {
+      return const _ReadOnlyFieldBox(label: 'Loading brands...');
+    }
+
+    if (_makeLoadError != null && _makes.isEmpty) {
+      return _RetryFieldBox(
+        label: 'Failed to load brands. Tap to retry',
+        onTap: _loadBrands,
+      );
+    }
+
+    return _DropdownFieldBox(
+      hint: 'Make',
+      value: _selectedMake,
+      items: _makes,
+      requiredField: true,
+      onChanged: _onMakeChanged,
+      useBottomSheetPicker: true,
+    );
+  }
+
+  Widget _buildModelField() {
+    if (_selectedBrandId == null) {
+      return const _ReadOnlyFieldBox(label: 'Select make first');
+    }
+
+    if (_isLoadingModels) {
+      return const _ReadOnlyFieldBox(label: 'Loading models...');
+    }
+
+    if (_modelLoadError != null && _models.isEmpty) {
+      return _RetryFieldBox(
+        label: 'Failed to load models. Tap to retry',
+        onTap: () {
+          final brandId = _selectedBrandId;
+          if (brandId != null) {
+            _loadModelsForBrand(brandId);
+          }
+        },
+      );
+    }
+
+    if (_models.isEmpty) {
+      return const _ReadOnlyFieldBox(label: 'No models available');
+    }
+
+    return _DropdownFieldBox(
+      hint: 'Model',
+      value: _selectedModel,
+      items: _models,
+      requiredField: true,
+      onChanged: (value) {
+        final opt = _modelOptions.where((o) => o.name == value).firstOrNull;
+        setState(() {
+          _selectedModel = value;
+          _selectedModelId = opt?.id;
+        });
+      },
+      useBottomSheetPicker: true,
+    );
+  }
+
   Future<void> _submitVehicle() async {
+    if (!_canSubmit) return;
+    setState(() => _isSubmitting = true);
+
+    try {
+      final licensePlate =
+          _vehicleNumberController.text.trim().replaceAll(' ', '').toUpperCase();
+      final odoText = _odometerController.text.trim();
+      final odoReading = odoText.isNotEmpty ? int.tryParse(odoText) : null;
+      final manufacturedYear = int.tryParse(_selectedYear ?? '');
+      final vehicleName = '${_selectedMake ?? ''} ${_selectedModel ?? ''}'.trim();
+
+      await _apiClient.addUserVehicle(
+        name: vehicleName,
+        vehicleId: _selectedModelId!,
+        licensePlate: licensePlate,
+        odoReading: odoReading,
+        manufacturedYear: manufacturedYear,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add vehicle: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -166,7 +407,7 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
                         label: 'Vehicle Number:',
                                 value: _formattedVehicleNumber,
                       ),
-                              const SizedBox(height: 15),
+                             // const SizedBox(height: 10),
                       _SummaryRow(label: 'Make:', value: _selectedMake!),const SizedBox(height: 15),
                       _SummaryRow(label: 'Model:', value: _selectedModel!),const SizedBox(height: 15),
                       _SummaryRow(label: 'Year:', value: _selectedYear!),const SizedBox(height: 15),
@@ -213,7 +454,8 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
                                 Navigator.of(sheetContext).pop();
                                 Navigator.of(context).pushAndRemoveUntil(
                                   MaterialPageRoute<void>(
-                                    builder: (_) => const HomeScreen(),
+                                    builder: (_) =>
+                                        const HomeScreenWrapper(),
                                   ),
                                   (route) => false,
                                 );
@@ -253,24 +495,10 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
                       hint: 'Vehicle Number',
                       requiredField: true,
                     ),
-                    const SizedBox(height: 54),
-                    _DropdownFieldBox(
-                      hint: 'Make',
-                      value: _selectedMake,
-                      items: _makes,
-                      requiredField: true,
-                      onChanged: (value) => setState(() => _selectedMake = value),
-                      useBottomSheetPicker: true,
-                    ),
                     const SizedBox(height: 14),
-                    _DropdownFieldBox(
-                      hint: 'Model',
-                      value: _selectedModel,
-                      items: _models,
-                      requiredField: true,
-                      onChanged: (value) => setState(() => _selectedModel = value),
-                      useBottomSheetPicker: true,
-                    ),
+                    _buildMakeField(),
+                    const SizedBox(height: 14),
+                    _buildModelField(),
                     const SizedBox(height: 14),
                     _DropdownFieldBox(
                       hint: 'Year',
@@ -338,13 +566,23 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-            child: GetStartedPrimaryButton(
-              width: double.infinity,
-              height: 48,
-              label: 'Add to My Garage  >',
-              enabled: _canSubmit,
-              onPressed: _canSubmit ? _submitVehicle : null,
-            ),
+            child: _isSubmitting
+                ? SizedBox(
+                    height: 48,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: const Color(0xFFB71C1C),
+                        strokeWidth: 2.5,
+                      ),
+                    ),
+                  )
+                : GetStartedPrimaryButton(
+                    width: double.infinity,
+                    height: 48,
+                    label: 'Add to My Garage  >',
+                    enabled: _canSubmit,
+                    onPressed: _canSubmit ? _submitVehicle : null,
+                  ),
           ),
         ),
       ),
@@ -733,6 +971,72 @@ class _DropdownFieldBox extends StatelessWidget {
             ),
           )
           .toList(),
+    );
+  }
+}
+
+class _ReadOnlyFieldBox extends StatelessWidget {
+  const _ReadOnlyFieldBox({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 52,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4F4),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFCFCFCF), width: 1),
+      ),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          color: const Color(0xFF666364),
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
+    );
+  }
+}
+
+class _RetryFieldBox extends StatelessWidget {
+  const _RetryFieldBox({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: double.infinity,
+        height: 52,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F4F4),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFD74A41), width: 1),
+        ),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            color: const Color(0xFFD74A41),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 }

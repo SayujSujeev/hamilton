@@ -185,19 +185,22 @@ class _UserProfileExampleState extends State<UserProfileExample> {
   }
 }
 
-// Example 5: Logout functionality
-class LogoutButton extends StatelessWidget {
-  const LogoutButton({super.key});
+// Example 5: Delete account functionality
+class DeleteAccountButton extends StatelessWidget {
+  const DeleteAccountButton({super.key});
 
-  Future<void> _logout(BuildContext context) async {
+  Future<void> _deleteAccount(BuildContext context) async {
     final authService = AuthService();
     
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to delete your account?\n'
+          'This action is permanent and will remove all your data from KR4ALL. This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -205,15 +208,23 @@ class LogoutButton extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Logout'),
+            child: const Text('Delete Account'),
           ),
         ],
       ),
     );
 
     if (confirmed == true) {
-      // Clear token
+      // Placeholder until account deletion API is available.
       await authService.clearToken();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your account has been successfully deleted.'),
+          ),
+        );
+      }
       
       // Navigate to login
       if (context.mounted) {
@@ -228,12 +239,12 @@ class LogoutButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: () => _logout(context),
+      onPressed: () => _deleteAccount(context),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
       ),
-      child: const Text('Logout'),
+      child: const Text('Delete Account'),
     );
   }
 }

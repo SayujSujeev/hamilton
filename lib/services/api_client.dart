@@ -245,10 +245,18 @@ class ApiClient {
   }
 
   /// GET /api/v1/brand/search — searches brands by name.
-  Future<List<Map<String, dynamic>>> searchBrands(String name) async {
+  /// [type] can be 'vehicle' or 'spare' to filter brand types.
+  Future<List<Map<String, dynamic>>> searchBrands(
+    String name, {
+    String? type,
+  }) async {
     final headers = await _getHeaders();
+    final queryParams = <String, String>{'name': name};
+    if (type != null) {
+      queryParams['type'] = type;
+    }
     final uri = Uri.parse('$baseUrl/api/v1/brand/search').replace(
-      queryParameters: {'name': name},
+      queryParameters: queryParams,
     );
     try {
       final response = await http.get(uri, headers: headers);

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hamilton_car_service/screens/services_screen.dart';
+import 'package:hamilton_car_service/screens/splash_screen.dart';
 
 import 'screens/continue_with_google_screen.dart';
-import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,8 +32,8 @@ class HamiltonCarServiceApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-    home: const SplashScreen(nextScreen: ContinueWithGoogleScreen()),
-      //home :ServicesScreen(),
+    //  home: const ContinueWithGoogleScreen(),
+      home :SplashScreen(nextScreen: ContinueWithGoogleScreen()),
     );
   }
 }

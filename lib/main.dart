@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:hamilton_car_service/screens/services_screen.dart';
 import 'package:hamilton_car_service/screens/splash_screen.dart';
 
 import 'screens/continue_with_google_screen.dart';

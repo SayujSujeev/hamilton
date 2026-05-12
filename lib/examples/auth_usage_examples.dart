@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import '../utils/auth_guard.dart';
 import '../screens/home_screen.dart';
+import '../models/vehicle_model.dart';
 
 /// Example of how to use the authentication system in your app
 
@@ -13,12 +14,12 @@ class ProtectedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AuthGuard(
-      child: const HomeScreen(),
       loadingWidget: const Scaffold(
         body: Center(
           child: CircularProgressIndicator(),
         ),
       ),
+      child: const HomeScreen(),
     );
   }
 }
@@ -58,7 +59,6 @@ class ManualAuthCheck extends StatefulWidget {
 
 class _ManualAuthCheckState extends State<ManualAuthCheck> {
   final AuthService _authService = AuthService();
-  final ApiClient _apiClient = ApiClient();
   
   @override
   void initState() {
@@ -105,10 +105,13 @@ class _UserProfileExampleState extends State<UserProfileExample> {
 
   Future<void> _loadUserProfile() async {
     try {
-      final profile = await _apiClient.getUserProfile();
+      final json = await _apiClient.handleAuthErrors(
+        () => _apiClient.getCurrentUser(),
+      );
+      final data = json['data'] as Map<String, dynamic>?;
       if (mounted) {
         setState(() {
-          _userProfile = profile;
+          _userProfile = data;
           _isLoading = false;
         });
       }
@@ -124,10 +127,12 @@ class _UserProfileExampleState extends State<UserProfileExample> {
 
   Future<void> _updateProfile() async {
     try {
-      await _apiClient.updateUserProfile({
-        'name': 'John Doe',
-        'email': 'john@example.com',
-      });
+      await _apiClient.handleAuthErrors(
+        () => _apiClient.updateCurrentUser({
+          'firstname': 'John',
+          'lastname': 'Doe',
+        }),
+      );
       
       // Reload profile
       await _loadUserProfile();
@@ -165,22 +170,31 @@ class _UserProfileExampleState extends State<UserProfileExample> {
       );
     }
 
+    if (_userProfile == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('User Profile')),
+        body: const Center(child: Text('No profile data')),
+      );
+    }
+
+    final profile = _userProfile!;
+    final displayName =
+        '${profile['firstname'] ?? ''} ${profile['lastname'] ?? ''}'.trim();
+
     return Scaffold(
       appBar: AppBar(title: const Text('User Profile')),
-      body: _userProfile != null
-          ? ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text('Name: ${_userProfile!['name'] ?? 'N/A'}'),
-                Text('Email: ${_userProfile!['email'] ?? 'N/A'}'),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _updateProfile,
-                  child: const Text('Update Profile'),
-                ),
-              ],
-            )
-          : const Center(child: Text('No profile data')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('Name: ${displayName.isEmpty ? 'N/A' : displayName}'),
+          Text('Email: ${profile['email'] ?? 'N/A'}'),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _updateProfile,
+            child: const Text('Update Profile'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -259,7 +273,7 @@ class VehiclesListExample extends StatefulWidget {
 
 class _VehiclesListExampleState extends State<VehiclesListExample> {
   final ApiClient _apiClient = ApiClient();
-  List<Map<String, dynamic>> _vehicles = [];
+  List<VehicleModel> _vehicles = [];
   bool _isLoading = true;
 
   @override
@@ -270,21 +284,14 @@ class _VehiclesListExampleState extends State<VehiclesListExample> {
 
   Future<void> _loadVehicles() async {
     try {
-      // Custom API call
-      final response = await _apiClient.handleAuthErrors(() async {
-        return await _apiClient.get('/api/v1/vehicles');
-      });
-
-      if (_apiClient.isSuccessful(response)) {
-        final data = _apiClient.parseJson(response);
-        if (mounted) {
-          setState(() {
-            _vehicles = List<Map<String, dynamic>>.from(
-              data['vehicles'] ?? [],
-            );
-            _isLoading = false;
-          });
-        }
+      final vehicles = await _apiClient.handleAuthErrors(
+        () => _apiClient.getUserVehicles(),
+      );
+      if (mounted) {
+        setState(() {
+          _vehicles = vehicles;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (e.toString().contains('Authentication expired')) {
@@ -326,8 +333,8 @@ class _VehiclesListExampleState extends State<VehiclesListExample> {
               itemBuilder: (context, index) {
                 final vehicle = _vehicles[index];
                 return ListTile(
-                  title: Text(vehicle['model'] ?? 'Unknown'),
-                  subtitle: Text(vehicle['plateNumber'] ?? 'N/A'),
+                  title: Text(vehicle.name),
+                  subtitle: Text(vehicle.licensePlate),
                 );
               },
             ),

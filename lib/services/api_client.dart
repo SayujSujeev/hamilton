@@ -19,10 +19,18 @@ class ApiClient {
   }
 
   /// Generic GET request
-  Future<http.Response> get(String endpoint) async {
+  Future<http.Response> get(
+    String endpoint, {
+    Map<String, String>? queryParameters,
+  }) async {
     final headers = await _getHeaders();
-    final uri = Uri.parse('$baseUrl$endpoint');
-    
+    var uri = Uri.parse('$baseUrl$endpoint');
+    if (queryParameters != null && queryParameters.isNotEmpty) {
+      uri = uri.replace(
+        queryParameters: {...uri.queryParameters, ...queryParameters},
+      );
+    }
+
     try {
       final response = await http.get(uri, headers: headers);
       return response;

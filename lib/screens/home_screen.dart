@@ -1,15 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/vehicle_model.dart';
 import '../services/auth_service.dart';
 import '../utils/brand_display_name.dart';
+import '../widgets/brand_logo_badge.dart';
 import '../widgets/get_started_primary_button.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
+import 'profile_screen.dart';
 import 'services_screen.dart';
+import 'upcoming_booking_detail_screen.dart';
+import 'vehicle_detail_screen.dart';
 
 String _formatLicensePlate(String plate) {
   final t = plate.trim();
@@ -26,12 +29,6 @@ String _formatOdometerKm(int km) {
     buf.write(s[i]);
   }
   return '${buf.toString()} km';
-}
-
-String _brandInitialLetter(String brandName) {
-  final t = brandName.trim();
-  if (t.isEmpty) return '?';
-  return t[0].toUpperCase();
 }
 
 /// Short label for the hero vehicle chip: `make · plate` (or nickname · plate).
@@ -77,9 +74,11 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.vehicles = const [],
+    this.profileImageUrl,
   });
 
   final List<VehicleModel> vehicles;
+  final String? profileImageUrl;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -110,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _heroImageHeight = 408.0;
 
   /// Must match the laid-out height of [_HeroDetailsSection].
-  static const double _heroDetailsHeight = 106.0;
+  static const double _heroDetailsHeight = 156.0;
 
   /// Gap between the white stats block and the action buttons.
   static const double _gapBelowHeroDetails = 14.0;
@@ -209,7 +208,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final v = _selectedVehicle;
     if (v == null) {
-      return const _HomeWithoutVehicleScaffold();
+      return _HomeWithoutVehicleScaffold(
+        profileImageUrl: widget.profileImageUrl,
+      );
     }
 
     return Scaffold(
@@ -228,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: _HeroImageArea(
                     vehicle: v,
                     onOpenGarage: () => _showGarageSheet(context),
+                    profileImageUrl: widget.profileImageUrl,
                   ),
                 ),
 
@@ -239,7 +241,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Material(
                     color: Colors.white,
                     elevation: 0,
-                    child: _HeroDetailsSection(vehicle: v),
+                    child: _HeroDetailsSection(
+                      vehicle: v,
+                      allVehicles: widget.vehicles,
+                    ),
                   ),
                 ),
 
@@ -276,13 +281,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: const [
-                                _ActionButtonsRow(),
-                                SizedBox(height: 14),
-                                _PromoCard(),
-                                SizedBox(height: 14),
-                                _CarouselDots(),
-                                SizedBox(height: 24),
+                              children: [
+                                _ActionButtonsRow(
+                                  userVehicleId: v.id,
+                                  vehicles: widget.vehicles,
+                                ),
+                                const SizedBox(height: 14),
+                                const _PromoCard(),
+                                const SizedBox(height: 14),
+                                const _CarouselDots(),
+                                const SizedBox(height: 24),
                               ],
                             ),
                           ),
@@ -294,7 +302,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const _BottomNavBar(),
+          _BottomNavBar(
+            userVehicleId: v.id,
+            vehicles: widget.vehicles,
+          ),
         ],
       ),
     );
@@ -392,7 +403,9 @@ Future<void> _debugCopyBearerToken(BuildContext context) async {
 }
 
 class _HomeWithoutVehicleScaffold extends StatelessWidget {
-  const _HomeWithoutVehicleScaffold();
+  const _HomeWithoutVehicleScaffold({this.profileImageUrl});
+
+  final String? profileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -425,7 +438,9 @@ class _HomeWithoutVehicleScaffold extends StatelessWidget {
                           left: 16,
                           right: 16,
                           top: topInset + 10,
-                          child: const _NoVehicleTopBar(),
+                          child: _NoVehicleTopBar(
+                            profileImageUrl: profileImageUrl,
+                          ),
                         ),
                         Positioned.fill(
                           child: Padding(
@@ -563,7 +578,9 @@ class _NoVehiclePromoCarouselState extends State<_NoVehiclePromoCarousel> {
 }
 
 class _NoVehicleTopBar extends StatelessWidget {
-  const _NoVehicleTopBar();
+  const _NoVehicleTopBar({this.profileImageUrl});
+
+  final String? profileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -571,20 +588,15 @@ class _NoVehicleTopBar extends StatelessWidget {
       height: 32,
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(100),
-              child: Image.asset(
-                'assets/images/home_profile_picture.png',
-                fit: BoxFit.cover,
-              ),
-            ),
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ProfileScreen(),
+                ),
+              );
+            },
+            child: _ProfileAvatar(imageUrl: profileImageUrl),
           ),
           const Spacer(),
           GestureDetector(
@@ -623,9 +635,13 @@ class _NoVehicleTopBar extends StatelessWidget {
 // HERO DETAILS SECTION  (stats + view-details — scrolls with content)
 // ─────────────────────────────────────────────────────────
 class _HeroDetailsSection extends StatelessWidget {
-  const _HeroDetailsSection({required this.vehicle});
+  const _HeroDetailsSection({
+    required this.vehicle,
+    required this.allVehicles,
+  });
 
   final VehicleModel vehicle;
+  final List<VehicleModel> allVehicles;
 
   @override
   Widget build(BuildContext context) {
@@ -636,7 +652,12 @@ class _HeroDetailsSection extends StatelessWidget {
         children: [
           _ServiceStatsRow(vehicle: vehicle),
           const SizedBox(height: 12),
-          const _ViewDetailsButton(),
+          _ViewDetailsButton(vehicle: vehicle),
+          const SizedBox(height: 8),
+          _UpcomingBookingDetailButton(
+            vehicle: vehicle,
+            vehicles: allVehicles,
+          ),
         ],
       ),
     );
@@ -647,10 +668,12 @@ class _HeroImageArea extends StatelessWidget {
   const _HeroImageArea({
     required this.vehicle,
     required this.onOpenGarage,
+    this.profileImageUrl,
   });
 
   final VehicleModel vehicle;
   final VoidCallback onOpenGarage;
+  final String? profileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -681,6 +704,7 @@ class _HeroImageArea extends StatelessWidget {
                   _TopBadgesRow(
                     vehicle: vehicle,
                     onOpenGarage: onOpenGarage,
+                    profileImageUrl: profileImageUrl,
                   ),
                   const SizedBox(height: 8),
                   _CarHeroBody(vehicle: vehicle),
@@ -698,10 +722,12 @@ class _TopBadgesRow extends StatelessWidget {
   const _TopBadgesRow({
     required this.vehicle,
     required this.onOpenGarage,
+    this.profileImageUrl,
   });
 
   final VehicleModel vehicle;
   final VoidCallback onOpenGarage;
+  final String? profileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -713,20 +739,15 @@ class _TopBadgesRow extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(100),
-                child: Image.asset(
-                  'assets/images/home_profile_picture.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ProfileScreen(),
+                  ),
+                );
+              },
+              child: _ProfileAvatar(imageUrl: profileImageUrl),
             ),
           ),
           Align(
@@ -748,7 +769,17 @@ class _TopBadgesRow extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        _SmallBrandBadge(brandName: vehicle.brandName),
+                        BrandLogoBadge(
+                          brandName: vehicle.brandName,
+                          brandLogoUrl: vehicle.brandLogoUrl,
+                          size: 16,
+                          backgroundColor: const Color(0x33FFFFFF),
+                          initialTextStyle: GoogleFonts.dmSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -809,6 +840,43 @@ class _TopBadgesRow extends StatelessWidget {
   }
 }
 
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmedUrl = imageUrl?.trim();
+    final hasNetworkImage = trimmedUrl != null && trimmedUrl.isNotEmpty;
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(100),
+        child: hasNetworkImage
+            ? Image.network(
+                trimmedUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Image.asset(
+                  'assets/images/home_profile_picture.png',
+                  fit: BoxFit.cover,
+                ),
+              )
+            : Image.asset(
+                'assets/images/home_profile_picture.png',
+                fit: BoxFit.cover,
+              ),
+      ),
+    );
+  }
+}
+
 class _VehicleOptionTile extends StatelessWidget {
   const _VehicleOptionTile({
     required this.vehicle,
@@ -827,7 +895,17 @@ class _VehicleOptionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Row(
         children: [
-          _GarageBrandBadge(brandName: vehicle.brandName),
+          BrandLogoBadge(
+            brandName: vehicle.brandName,
+            brandLogoUrl: vehicle.brandLogoUrl,
+            size: 20,
+            backgroundColor: const Color(0xFFFFF5E9),
+            initialTextStyle: GoogleFonts.dmSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF8A4E12),
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -871,44 +949,6 @@ class _VehicleOptionTile extends StatelessWidget {
   }
 }
 
-class _GarageBrandBadge extends StatelessWidget {
-  const _GarageBrandBadge({required this.brandName});
-
-  final String brandName;
-
-  @override
-  Widget build(BuildContext context) {
-    final lower = brandName.toLowerCase();
-    if (lower.contains('bmw')) {
-      return SvgPicture.asset(
-        'assets/images/bmwsvg.svg',
-        width: 20,
-        height: 20,
-      );
-    }
-
-    final initial = _brandInitialLetter(displayMakeNameForUi(brandName));
-
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFFF5E9),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initial,
-        style: GoogleFonts.dmSans(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF8A4E12),
-        ),
-      ),
-    );
-  }
-}
-
 class _GarageAddVehicleBar extends StatelessWidget {
   const _GarageAddVehicleBar({required this.onPressed});
 
@@ -928,41 +968,6 @@ class _GarageAddVehicleBar extends StatelessWidget {
         height: 48,
         label: '+ Add New Vehicle',
         onPressed: onPressed,
-      ),
-    );
-  }
-}
-
-class _SmallBrandBadge extends StatelessWidget {
-  const _SmallBrandBadge({required this.brandName});
-
-  final String brandName;
-
-  @override
-  Widget build(BuildContext context) {
-    final lower = brandName.toLowerCase();
-    if (lower.contains('bmw')) {
-      return SvgPicture.asset(
-        'assets/images/bmwsvg.svg',
-        width: 16,
-        height: 16,
-      );
-    }
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: const BoxDecoration(
-        color: Color(0x33FFFFFF),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        _brandInitialLetter(displayMakeNameForUi(brandName)),
-        style: GoogleFonts.dmSans(
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
       ),
     );
   }
@@ -1167,7 +1172,9 @@ class _StatItem extends StatelessWidget {
 }
 
 class _ViewDetailsButton extends StatelessWidget {
-  const _ViewDetailsButton();
+  const _ViewDetailsButton({required this.vehicle});
+
+  final VehicleModel vehicle;
 
   @override
   Widget build(BuildContext context) {
@@ -1175,7 +1182,13 @@ class _ViewDetailsButton extends StatelessWidget {
       width: 358,
       height: 40,
       child: OutlinedButton(
-        onPressed: () {},
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => VehicleDetailScreen(vehicle: vehicle),
+            ),
+          );
+        },
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.transparent,
           foregroundColor: const Color(0xFF222222),
@@ -1206,15 +1219,76 @@ class _ViewDetailsButton extends StatelessWidget {
   }
 }
 
+class _UpcomingBookingDetailButton extends StatelessWidget {
+  const _UpcomingBookingDetailButton({
+    required this.vehicle,
+    required this.vehicles,
+  });
+
+  final VehicleModel vehicle;
+  final List<VehicleModel> vehicles;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 358,
+      height: 40,
+      child: OutlinedButton(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => UpcomingBookingDetailScreen(
+                vehicle: vehicle,
+                vehicles: vehicles,
+              ),
+            ),
+          );
+        },
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: const Color(0xFF222222),
+          side: const BorderSide(color: Color(0xFFBEBEBE), width: 1),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(100),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Upcoming Booking Details',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, size: 16, color: Color(0xFF555555)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────
 // ACTION BUTTONS
 // ─────────────────────────────────────────────────────────
 class _ActionButtonsRow extends StatelessWidget {
-  const _ActionButtonsRow();
+  const _ActionButtonsRow({
+    required this.userVehicleId,
+    required this.vehicles,
+  });
+
+  final String userVehicleId;
+  final List<VehicleModel> vehicles;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         SizedBox(
@@ -1223,10 +1297,20 @@ class _ActionButtonsRow extends StatelessWidget {
             icon: Icons.calendar_month_outlined,
             label: 'Book Service',
             imageAsset: 'assets/images/home_btn_book_service.png',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ServicesScreen(
+                    userVehicleId: userVehicleId,
+                    vehicles: vehicles,
+                  ),
+                ),
+              );
+            },
           ),
         ),
-        SizedBox(width: 8),
-        SizedBox(
+        const SizedBox(width: 8),
+        const SizedBox(
           width: 163,
           child: _DarkActionButton(
             icon: Icons.local_shipping_outlined,
@@ -1244,11 +1328,13 @@ class _DarkActionButton extends StatelessWidget {
     required this.icon,
     required this.label,
     this.imageAsset,
+    this.onPressed,
   });
 
   final IconData icon;
   final String label;
   final String? imageAsset;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1260,7 +1346,7 @@ class _DarkActionButton extends StatelessWidget {
             width: double.infinity,
             height: 70,
             label: '',
-            onPressed: () {},
+            onPressed: onPressed ?? () {},
           ),
           Positioned.fill(
             child: IgnorePointer(
@@ -1414,7 +1500,13 @@ class _Dot extends StatelessWidget {
 // BOTTOM NAV
 // ─────────────────────────────────────────────────────────
 class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar();
+  const _BottomNavBar({
+    this.userVehicleId,
+    this.vehicles = const [],
+  });
+
+  final String? userVehicleId;
+  final List<VehicleModel> vehicles;
 
   @override
   Widget build(BuildContext context) {
@@ -1441,7 +1533,10 @@ class _BottomNavBar extends StatelessWidget {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => const ServicesScreen(),
+                    builder: (_) => ServicesScreen(
+                      userVehicleId: userVehicleId,
+                      vehicles: vehicles,
+                    ),
                   ),
                 );
               },

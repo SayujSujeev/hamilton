@@ -33,6 +33,8 @@ class VehicleModel {
   final String name;
   final String? nickname;
   final String brandName;
+  /// HTTPS URL to a make logo hosted on your CDN (e.g. PNG/WebP).
+  final String? brandLogoUrl;
   final String? imageUrl;
   /// Raw note value — the API may return a String, a Map, or null.
   final dynamic note;
@@ -53,6 +55,7 @@ class VehicleModel {
     required this.name,
     this.nickname,
     required this.brandName,
+    this.brandLogoUrl,
     this.imageUrl,
     this.note,
     required this.licensePlate,
@@ -83,6 +86,7 @@ class VehicleModel {
       name: (json['name'] ?? '') as String,
       nickname: json['nickname'] as String?,
       brandName: (json['brand_name'] ?? '') as String,
+      brandLogoUrl: json['brand_logo_url'] as String?,
       imageUrl: json['image_url'] as String?,
       note: json['note'],
       licensePlate: (json['license_plate'] ?? '') as String,
@@ -106,6 +110,7 @@ class VehicleModel {
         'name': name,
         if (nickname != null) 'nickname': nickname,
         'brand_name': brandName,
+        if (brandLogoUrl != null) 'brand_logo_url': brandLogoUrl,
         if (imageUrl != null) 'image_url': imageUrl,
         if (note != null) 'note': note,
         'license_plate': licensePlate,

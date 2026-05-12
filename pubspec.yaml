@@ -86,6 +86,7 @@ flutter:
     - assets/images/service_tyre_header_icon.png
     - assets/images/service_wheel_alignment.png
     - assets/images/service_wheel_balance.png
+    - assets/images/services_header_bg.png
     - assets/images/service_lubricants.png
     - assets/images/lubrihand_headericon.png
     - assets/images/wheelalignment_headericon.png

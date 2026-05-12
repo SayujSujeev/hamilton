@@ -17,6 +17,7 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
   final AuthService _authService = AuthService();
 
   List<VehicleModel>? _vehicles;
+  String? _profileImageUrl;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -43,10 +44,12 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
       }
 
       final vehicles = await _userService.getUserVehicles();
+      final user = await _userService.getCurrentUser();
 
       if (mounted) {
         setState(() {
           _vehicles = vehicles;
+          _profileImageUrl = user.imageUrl;
           _isLoading = false;
         });
       }
@@ -128,6 +131,9 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
       );
     }
 
-    return HomeScreen(vehicles: _vehicles ?? []);
+    return HomeScreen(
+      vehicles: _vehicles ?? [],
+      profileImageUrl: _profileImageUrl,
+    );
   }
 }

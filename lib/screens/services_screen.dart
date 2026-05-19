@@ -3,7 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/booking_cart_line.dart';
 import '../models/vehicle_model.dart';
+import '../models/workshop_service.dart';
+import '../services/service_catalog_service.dart';
 import '../utils/brand_display_name.dart';
+import '../utils/service_display_mapper.dart';
 import '../widgets/brand_logo_badge.dart';
 import '../widgets/get_started_primary_button.dart';
 import '../widgets/select_tyre_brand_sheet.dart';
@@ -53,12 +56,57 @@ class ServicesScreen extends StatefulWidget {
 }
 
 class _ServicesScreenState extends State<ServicesScreen> {
+  final ServiceCatalogService _serviceCatalog = ServiceCatalogService();
+
   late int _selectedVehicleIndex;
+  List<_ServiceItemData> _services = [];
+  bool _servicesLoading = true;
+  String? _servicesError;
 
   @override
   void initState() {
     super.initState();
     _selectedVehicleIndex = _initialVehicleIndex();
+    _loadServices();
+  }
+
+  Future<void> _loadServices() async {
+    setState(() {
+      _servicesLoading = true;
+      _servicesError = null;
+    });
+    try {
+      final apiServices = await _serviceCatalog.fetchServices();
+      if (!mounted) return;
+      setState(() {
+        _services = apiServices.map(_mapWorkshopServiceToItem).toList();
+        _servicesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _servicesLoading = false;
+        _servicesError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  _ServiceItemData _mapWorkshopServiceToItem(WorkshopService s) {
+    final presentation = presentationForWorkshopService(s);
+    final imageUrl = s.imageUrl?.trim();
+    return _ServiceItemData(
+      title: titleCaseServiceName(s.name),
+      duration: formatApproxServiceDuration(s.approxServiceTime),
+      imageAsset: presentation.imageAsset,
+      imageUrl: imageUrl != null && imageUrl.isNotEmpty ? imageUrl : null,
+      footerLabel: presentation.footerLabel,
+      footerIcon: presentation.footerIcon,
+      glowColor: presentation.glowColor,
+      gradientEndColor: presentation.gradientEndColor,
+      headerIconAsset: presentation.headerIconAsset,
+      opensTyreBrandSheet: presentation.opensTyreBrandSheet,
+      apiServiceTypeId: s.id,
+    );
   }
 
   int _initialVehicleIndex() {
@@ -248,57 +296,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
     );
   }
 
-  static const List<_ServiceItemData> _services = [
-    _ServiceItemData(
-      title: 'Tyre Replacement',
-      duration: '45-90 min',
-      imageAsset: 'assets/images/service_tyre_replacement.png',
-      footerLabel: '3 Brands Available',
-      footerIcon: Icons.info_outline,
-      glowColor: Color(0xFF88F8E9),
-      gradientEndColor: Color(0xFFE4FBF8),
-      headerIconAsset: 'assets/images/service_tyre_header_icon.png',
-      fixedBookPrice: null,
-      apiServiceTypeId: null,
-    ),
-    _ServiceItemData(
-      title: 'Wheel Alignment',
-      duration: '45-90 min',
-      imageAsset: 'assets/images/service_wheel_alignment.png',
-      footerLabel: 'From 280.00',
-      footerIcon: Icons.local_offer_outlined,
-      glowColor: Color(0xFFFCF3AB),
-      gradientEndColor: Color(0xFFFBF6DC),
-      headerIconAsset: 'assets/images/service_tyre_header_icon.png',
-      fixedBookPrice: 320,
-      apiServiceTypeId: null,
-    ),
-    _ServiceItemData(
-      title: 'Wheel Balance',
-      duration: '45-90 min',
-      imageAsset: 'assets/images/service_wheel_balance.png',
-      footerLabel: 'From 280.00',
-      footerIcon: Icons.local_offer_outlined,
-      glowColor: Color(0xFFA8B9FF),
-      gradientEndColor: Color(0xFFE4E8FF),
-      headerIconAsset: 'assets/images/service_tyre_header_icon.png',
-      fixedBookPrice: 280,
-      apiServiceTypeId: null,
-    ),
-    _ServiceItemData(
-      title: 'Lubricants',
-      duration: '45-90 min',
-      imageAsset: 'assets/images/service_lubricants.png',
-      footerLabel: '3 Brands Available',
-      footerIcon: Icons.info_outline,
-      glowColor: Color(0xFFFFA8B1),
-      gradientEndColor: Color(0xFFFFF1F1),
-      headerIconAsset: 'assets/images/service_tyre_header_icon.png',
-      fixedBookPrice: 280,
-      apiServiceTypeId: null,
-    ),
-  ];
-
   final Map<String, BookingCartLine> _cart = {};
 
   int get _selectedCount => _cart.length;
@@ -307,11 +304,11 @@ class _ServicesScreenState extends State<ServicesScreen> {
       _cart.values.fold<double>(0, (sum, line) => sum + line.amount);
 
   Future<void> _handleAddToCart(_ServiceItemData item) async {
-    if (item.fixedBookPrice == null) {
+    if (item.opensTyreBrandSheet) {
       final result = await showSelectTyreBrandSheet(context);
       if (!mounted || result == null) return;
       setState(() {
-        _cart[item.title] = BookingCartLine(
+        _cart[item.cartKey] = BookingCartLine(
           title: item.title,
           amount: result.lineTotal,
           subtitle: '${result.brandName} × ${result.quantity}',
@@ -322,16 +319,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
     }
 
     setState(() {
-      _cart[item.title] = BookingCartLine(
+      _cart[item.cartKey] = BookingCartLine(
         title: item.title,
-        amount: item.fixedBookPrice!,
+        amount: 0,
         serviceTypeId: item.apiServiceTypeId,
       );
     });
   }
 
-  void _handleRemoveFromCart(String title) {
-    setState(() => _cart.remove(title));
+  void _handleRemoveFromCart(String cartKey) {
+    setState(() => _cart.remove(cartKey));
   }
 
   @override
@@ -388,25 +385,53 @@ class _ServicesScreenState extends State<ServicesScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          for (int index = 0; index < _services.length; index++) ...[
-                            if (index > 0) const SizedBox(height: 12),
-                            Builder(
-                              builder: (context) {
-                                final item = _services[index];
-                                final selected = _cart.containsKey(item.title);
-                                return _ServiceCard(
-                                  item: item,
-                                  selected: selected,
-                                  onAddTap: selected
-                                      ? null
-                                      : () => _handleAddToCart(item),
-                                  onRemoveTap: selected
-                                      ? () => _handleRemoveFromCart(item.title)
-                                      : null,
-                                );
-                              },
-                            ),
-                          ],
+                          if (_servicesLoading)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 48),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFB71C1C),
+                                ),
+                              ),
+                            )
+                          else if (_servicesError != null)
+                            _ServicesLoadError(
+                              message: _servicesError!,
+                              onRetry: _loadServices,
+                            )
+                          else if (_services.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 32),
+                              child: Text(
+                                'No services available right now.',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 14,
+                                  color: const Color(0xFF6B6B6B),
+                                ),
+                              ),
+                            )
+                          else
+                            for (int index = 0; index < _services.length; index++) ...[
+                              if (index > 0) const SizedBox(height: 12),
+                              Builder(
+                                builder: (context) {
+                                  final item = _services[index];
+                                  final selected =
+                                      _cart.containsKey(item.cartKey);
+                                  return _ServiceCard(
+                                    item: item,
+                                    selected: selected,
+                                    onAddTap: selected
+                                        ? null
+                                        : () => _handleAddToCart(item),
+                                    onRemoveTap: selected
+                                        ? () =>
+                                            _handleRemoveFromCart(item.cartKey)
+                                        : null,
+                                  );
+                                },
+                              ),
+                            ],
                         ],
                       ),
                     ),
@@ -698,6 +723,46 @@ class _SearchAndFilterRow extends StatelessWidget {
   }
 }
 
+class _ServicesLoadError extends StatelessWidget {
+  const _ServicesLoadError({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              color: const Color(0xFF6B6B6B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: onRetry,
+            child: Text(
+              'Retry',
+              style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFB71C1C),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ServiceItemData {
   const _ServiceItemData({
     required this.title,
@@ -707,23 +772,54 @@ class _ServiceItemData {
     required this.footerIcon,
     required this.glowColor,
     required this.gradientEndColor,
-    required this.fixedBookPrice,
     this.headerIconAsset,
+    this.imageUrl,
+    this.opensTyreBrandSheet = false,
     this.apiServiceTypeId,
   });
 
   final String title;
   final String duration;
   final String imageAsset;
+  final String? imageUrl;
   final String footerLabel;
   final IconData footerIcon;
   final Color glowColor;
   final Color gradientEndColor;
   final String? headerIconAsset;
-  /// When null, booking opens the tyre brand sheet; otherwise tap adds this price.
-  final double? fixedBookPrice;
-  /// Backend `service_type` UUID when known (optional).
+  final bool opensTyreBrandSheet;
+  /// Backend `service_type` UUID from GET /api/v1/service.
   final String? apiServiceTypeId;
+
+  String get cartKey => apiServiceTypeId ?? title;
+}
+
+class _ServiceCardImage extends StatelessWidget {
+  const _ServiceCardImage({required this.item});
+
+  final _ServiceItemData item;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = item.imageUrl;
+    if (url != null && url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        errorBuilder: (_, __, ___) => Image.asset(
+          item.imageAsset,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+        ),
+      );
+    }
+    return Image.asset(
+      item.imageAsset,
+      fit: BoxFit.contain,
+      alignment: Alignment.center,
+    );
+  }
 }
 
 class _ServiceCard extends StatelessWidget {
@@ -784,11 +880,7 @@ class _ServiceCard extends StatelessWidget {
             right: 12,
             top: 72,
             bottom: 44,
-            child: Image.asset(
-              item.imageAsset,
-              fit: BoxFit.contain,
-              alignment: Alignment.center,
-            ),
+            child: _ServiceCardImage(item: item),
           ),
           // Header row: icon + title/time + arrow
           Positioned(

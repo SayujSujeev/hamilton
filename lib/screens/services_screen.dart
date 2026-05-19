@@ -300,9 +300,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   int get _selectedCount => _cart.length;
 
-  double get _cartTotal =>
-      _cart.values.fold<double>(0, (sum, line) => sum + line.amount);
-
   Future<void> _handleAddToCart(_ServiceItemData item) async {
     if (item.opensTyreBrandSheet) {
       final result = await showSelectTyreBrandSheet(context);
@@ -310,7 +307,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
       setState(() {
         _cart[item.cartKey] = BookingCartLine(
           title: item.title,
-          amount: result.lineTotal,
           subtitle: '${result.brandName} × ${result.quantity}',
           serviceTypeId: item.apiServiceTypeId,
         );
@@ -321,7 +317,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
     setState(() {
       _cart[item.cartKey] = BookingCartLine(
         title: item.title,
-        amount: 0,
         serviceTypeId: item.apiServiceTypeId,
       );
     });
@@ -442,7 +437,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
           ),
           _BottomBookingBar(
             selectedCount: _selectedCount,
-            total: _cartTotal,
             lines: _cart.values.toList(growable: false),
             onBookAll: _selectedCount > 0
                 ? () async {
@@ -451,7 +445,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
                         builder: (_) => BookingDateTimeScreen(
                           cartLines:
                               _cart.values.toList(growable: false),
-                          total: _cartTotal,
                           userVehicleId: _selectedVehicleUserRowId,
                         ),
                       ),
@@ -1044,13 +1037,11 @@ class _ServiceCard extends StatelessWidget {
 class _BottomBookingBar extends StatefulWidget {
   const _BottomBookingBar({
     required this.selectedCount,
-    required this.total,
     required this.lines,
     this.onBookAll,
   });
 
   final int selectedCount;
-  final double total;
   final List<BookingCartLine> lines;
   final VoidCallback? onBookAll;
 
@@ -1124,15 +1115,6 @@ class _BottomBookingBarState extends State<_BottomBookingBar> {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Q ${widget.total.toStringAsFixed(2)}',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF151515),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -1204,14 +1186,6 @@ class _BottomBookingBarState extends State<_BottomBookingBar> {
                                     ),
                                   ],
                                 ],
-                              ),
-                            ),
-                            Text(
-                              'Q ${line.amount.toStringAsFixed(2)}',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF151515),
                               ),
                             ),
                           ],

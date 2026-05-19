@@ -12,12 +12,10 @@ class BookingDateTimeScreen extends StatefulWidget {
   const BookingDateTimeScreen({
     super.key,
     required this.cartLines,
-    required this.total,
     this.userVehicleId,
   });
 
   final List<BookingCartLine> cartLines;
-  final double total;
   /// `VehicleModel.id` from GET /api/v1/user/vehicle (user↔vehicle row).
   final String? userVehicleId;
 
@@ -222,7 +220,6 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
                 children: [
                   _SummaryCard(
                     lines: widget.cartLines,
-                    total: widget.total,
                     serviceCount: k,
                   ),
                   const SizedBox(height: 22),
@@ -446,12 +443,10 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.lines,
-    required this.total,
     required this.serviceCount,
   });
 
   final List<BookingCartLine> lines;
-  final double total;
   final int serviceCount;
 
   @override
@@ -468,7 +463,7 @@ class _SummaryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$serviceCount service${serviceCount == 1 ? '' : 's'} • Q ${total.toStringAsFixed(2)}',
+            '$serviceCount service${serviceCount == 1 ? '' : 's'} selected',
             style: GoogleFonts.dmSans(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -479,41 +474,26 @@ class _SummaryCard extends StatelessWidget {
           ...lines.map((line) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          line.title,
-                          style: GoogleFonts.dmSans(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            color: const Color(0xFF444444),
-                          ),
-                        ),
-                        if (line.subtitle != null)
-                          Text(
-                            line.subtitle!,
-                            style: GoogleFonts.dmSans(
-                              fontWeight: FontWeight.w400,
-                              fontSize: 10,
-                              color: const Color(0xFF909090),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
                   Text(
-                    'Q ${line.amount.toStringAsFixed(2)}',
+                    line.title,
                     style: GoogleFonts.dmSans(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       fontSize: 12,
-                      color: const Color(0xFF151515),
+                      color: const Color(0xFF444444),
                     ),
                   ),
+                  if (line.subtitle != null)
+                    Text(
+                      line.subtitle!,
+                      style: GoogleFonts.dmSans(
+                        fontWeight: FontWeight.w400,
+                        fontSize: 10,
+                        color: const Color(0xFF909090),
+                      ),
+                    ),
                 ],
               ),
             );

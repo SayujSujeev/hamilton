@@ -1,4 +1,5 @@
 import '../booking/slot_booking_logic.dart';
+import '../models/user_booking.dart';
 import '../models/workshop_slot.dart';
 import 'api_client.dart';
 
@@ -48,5 +49,32 @@ class SlotService {
       }
     }
     return null;
+  }
+
+  /// Fetch all bookings belonging to the current user via
+  /// `GET /api/v1/user/slots`. Tolerates the API returning the list under
+  /// `data`, `data.bookings`, or `data.slots`.
+  Future<List<UserBooking>> fetchUserBookings() async {
+    final response = await _api.get('/api/v1/user/slots');
+    final map = _api.parseJson(response);
+
+    final raw = map['data'];
+    List<dynamic> rows = const [];
+    if (raw is List) {
+      rows = raw;
+    } else if (raw is Map<String, dynamic>) {
+      for (final key in const ['bookings', 'slots', 'data', 'items']) {
+        final v = raw[key];
+        if (v is List) {
+          rows = v;
+          break;
+        }
+      }
+    }
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(UserBooking.fromJson)
+        .toList();
   }
 }

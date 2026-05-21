@@ -114,31 +114,63 @@ class SlotBookingLogic {
         .toList(growable: false);
   }
 
+  /// True if [selectedDate] is the same calendar day as [now].
+  static bool isSameCalendarDay(DateTime selectedDate, DateTime now) {
+    return DateUtils.isSameDay(selectedDate, now);
+  }
+
+  /// True when [slot]'s start time is already past [now]. Always false if
+  /// the slot timing can't be parsed.
+  static bool isSlotInPast(WorkshopSlot slot, DateTime now) {
+    final t = parseSlotTiming(slot.slotTiming);
+    if (t == null) return false;
+    final nowMinutes = now.hour * 60 + now.minute;
+    return minutesSinceMidnight(t) <= nowMinutes;
+  }
+
   /// First slots where each of [orderedServiceIds] has capacity on consecutive rows.
+  ///
+  /// When [now] is provided and [selectedDate] matches today, slots whose
+  /// start time has already passed are filtered out so the user can't pick
+  /// a stale time (e.g. 8:00 AM at 11:30 AM).
   static List<WorkshopSlot> eligibleStartSlots({
     required List<WorkshopSlot> sortedSlots,
     required List<String> orderedServiceIds,
+    DateTime? selectedDate,
+    DateTime? now,
   }) {
     if (sortedSlots.isEmpty || orderedServiceIds.isEmpty) return [];
+
+    final filterPast = selectedDate != null &&
+        now != null &&
+        isSameCalendarDay(selectedDate, now);
+
+    final source = filterPast
+        ? [
+            for (final s in sortedSlots)
+              if (!isSlotInPast(s, now)) s,
+          ]
+        : sortedSlots;
+
     final k = orderedServiceIds.length;
     if (k == 1) {
       final id = orderedServiceIds.first;
       return [
-        for (final s in sortedSlots)
+        for (final s in source)
           if (s.capacityForServiceId(id)) s,
       ];
     }
 
     final out = <WorkshopSlot>[];
-    for (var i = 0; i <= sortedSlots.length - k; i++) {
+    for (var i = 0; i <= source.length - k; i++) {
       var ok = true;
       for (var j = 0; j < k; j++) {
-        if (!sortedSlots[i + j].capacityForServiceId(orderedServiceIds[j])) {
+        if (!source[i + j].capacityForServiceId(orderedServiceIds[j])) {
           ok = false;
           break;
         }
       }
-      if (ok) out.add(sortedSlots[i]);
+      if (ok) out.add(source[i]);
     }
     return out;
   }

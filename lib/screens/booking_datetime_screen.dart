@@ -103,6 +103,8 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
         eligible = SlotBookingLogic.eligibleStartSlots(
           sortedSlots: sorted,
           orderedServiceIds: ids,
+          selectedDate: _selectedDate,
+          now: DateTime.now(),
         );
       }
 

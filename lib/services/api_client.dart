@@ -220,6 +220,34 @@ class ApiClient {
     return parseJson(response);
   }
 
+  /// GET /api/v1/user/booking — returns bookings for the current user.
+  ///
+  /// Response shape:
+  /// ```
+  /// {
+  ///   "message": "success",
+  ///   "data": [
+  ///     {
+  ///       "id": "...",
+  ///       "booking_date": "2026-05-13",
+  ///       "slot": { "id": "...", "slot_timing": "08:00" },
+  ///       "description": "...",
+  ///       "status": "confirmed",
+  ///       "json_build_object": { "id": "...", "service_name": "..." },
+  ///       "vehicle_detail": {
+  ///         "id": "...",
+  ///         "license_plate": "...",
+  ///         "odo_reading": 10001
+  ///       }
+  ///     }
+  ///   ]
+  /// }
+  /// ```
+  Future<Map<String, dynamic>> getUserBookings() async {
+    final response = await get('/api/v1/user/booking');
+    return parseJson(response);
+  }
+
   /// GET /api/v1/brand — returns a paginated list of all brands.
   Future<List<Map<String, dynamic>>> getBrands({
     int offset = 0,

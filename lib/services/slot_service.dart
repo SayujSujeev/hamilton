@@ -51,11 +51,47 @@ class SlotService {
     return null;
   }
 
+  /// PATCH `/api/v1/slots/{id}` — update an existing booked slot.
+  ///
+  /// Only the fields you pass are sent. Use this for both rescheduling
+  /// (set [bookingDate] and/or [slotId]) and cancellation
+  /// (set [status] to `"cancelled"` or [isActive] to `false`).
+  ///
+  /// Returns the raw decoded JSON response from the server.
+  Future<Map<String, dynamic>> updateBookedSlot({
+    required String bookingId,
+    String? bookingDate,
+    String? slotId,
+    String? description,
+    String? vehicleUserRowId,
+    String? serviceTypeId,
+    String? status,
+    bool? isActive,
+  }) async {
+    final body = <String, dynamic>{
+      if (bookingDate != null) 'booking_date': bookingDate,
+      if (slotId != null) 'slot': slotId,
+      if (description != null) 'description': description,
+      if (vehicleUserRowId != null) 'vehicle': vehicleUserRowId,
+      if (serviceTypeId != null) 'service_type': serviceTypeId,
+      if (status != null) 'status': status,
+      if (isActive != null) 'is_active': isActive,
+    };
+    final response = await _api.patch('/api/v1/slots/$bookingId', body: body);
+    return _api.parseJson(response);
+  }
+
+  /// Convenience: cancel a booking via PATCH `/api/v1/slots/{id}` with
+  /// `status: "cancelled"`.
+  Future<void> cancelBooking(String bookingId) async {
+    await updateBookedSlot(bookingId: bookingId, status: 'cancelled');
+  }
+
   /// Fetch all bookings belonging to the current user via
-  /// `GET /api/v1/user/slots`. Tolerates the API returning the list under
+  /// `GET /api/v1/user/booking`. Tolerates the API returning the list under
   /// `data`, `data.bookings`, or `data.slots`.
   Future<List<UserBooking>> fetchUserBookings() async {
-    final response = await _api.get('/api/v1/user/slots');
+    final response = await _api.get('/api/v1/user/booking');
     final map = _api.parseJson(response);
 
     final raw = map['data'];

@@ -7,7 +7,7 @@ import '../utils/brand_display_name.dart';
 import 'services_screen.dart';
 
 /// Shows upcoming workshop bookings for [vehicle], pulled from
-/// `GET /api/v1/user/slots` and filtered to this car.
+/// `GET /api/v1/user/booking` and filtered to this car.
 class UpcomingBookingDetailScreen extends StatefulWidget {
   const UpcomingBookingDetailScreen({
     super.key,
@@ -30,6 +30,7 @@ class _UpcomingBookingDetailScreenState
   bool _loading = true;
   String? _error;
   List<UserBooking> _bookings = const [];
+  final Set<String> _cancellingIds = <String>{};
 
   @override
   void initState() {
@@ -78,6 +79,75 @@ class _UpcomingBookingDetailScreenState
         _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  Future<void> _onCancelBooking(UserBooking booking) async {
+    if (booking.id.isEmpty) return;
+    if (_cancellingIds.contains(booking.id)) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Cancel booking?',
+          style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'This will cancel your workshop appointment. You can always book '
+          'another slot afterwards.',
+          style: GoogleFonts.dmSans(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Keep booking',
+              style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF555555),
+              ),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB71C1C),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+              'Cancel booking',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancellingIds.add(booking.id));
+
+    try {
+      await _slotService.cancelBooking(booking.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking cancelled.')),
+      );
+      await _loadBookings();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not cancel: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _cancellingIds.remove(booking.id));
+      }
     }
   }
 
@@ -170,7 +240,11 @@ class _UpcomingBookingDetailScreenState
       children: [
         for (var i = 0; i < _bookings.length; i++) ...[
           if (i > 0) const SizedBox(height: 12),
-          _BookingCard(booking: _bookings[i]),
+          _BookingCard(
+            booking: _bookings[i],
+            isCancelling: _cancellingIds.contains(_bookings[i].id),
+            onCancel: () => _onCancelBooking(_bookings[i]),
+          ),
         ],
       ],
     );
@@ -178,9 +252,21 @@ class _UpcomingBookingDetailScreenState
 }
 
 class _BookingCard extends StatelessWidget {
-  const _BookingCard({required this.booking});
+  const _BookingCard({
+    required this.booking,
+    required this.isCancelling,
+    required this.onCancel,
+  });
 
   final UserBooking booking;
+  final bool isCancelling;
+  final VoidCallback onCancel;
+
+  bool get _canCancel {
+    if (booking.id.isEmpty) return false;
+    final s = booking.status.toLowerCase().trim();
+    return s != 'cancelled' && s != 'canceled' && s != 'completed' && s != 'done';
+  }
 
   static const _months = <String>[
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -343,6 +429,47 @@ class _BookingCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+          if (_canCancel) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFEFEFEF)),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: isCancelling ? null : onCancel,
+                icon: isCancelling
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFFB71C1C),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: Color(0xFFB71C1C),
+                      ),
+                label: Text(
+                  isCancelling ? 'Cancelling…' : 'Cancel booking',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFFB71C1C),
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ),
           ],
         ],

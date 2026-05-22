@@ -1,9 +1,16 @@
 /// A single booking belonging to the current user.
 ///
-/// The backend (`GET /api/v1/user/slots`) may return either a flat shape
-/// (`booking_date`, `slot_timing`, `vehicle_id`, ...) or a nested shape
-/// (`slot: { slot_timing, slot_id }`, `vehicle: { id, name, ... }`).
-/// This parser accepts both so callers don't need to special-case it.
+/// The backend may return one of several shapes:
+///
+/// 1. Flat: `booking_date`, `slot_timing`, `vehicle_id`, ...
+/// 2. Legacy nested (`GET /api/v1/user/slots`):
+///    `slot: { slot_timing, slot_id }`, `vehicle: { id, name, ... }`
+/// 3. Current (`GET /api/v1/user/booking`):
+///    `slot: { id, slot_timing }`,
+///    `vehicle_detail: { id, license_plate, odo_reading }`,
+///    `json_build_object: { id, service_name }` (single service per row).
+///
+/// This parser accepts all of them so callers don't need to special-case it.
 class UserBooking {
   const UserBooking({
     required this.id,
@@ -14,6 +21,7 @@ class UserBooking {
     required this.vehicleName,
     required this.vehicleBrand,
     required this.licensePlate,
+    required this.odoReading,
     required this.serviceNames,
     required this.description,
     required this.status,
@@ -27,6 +35,7 @@ class UserBooking {
   final String vehicleName;
   final String vehicleBrand;
   final String licensePlate;
+  final int? odoReading;
   final List<String> serviceNames;
   final String description;
   final String status;
@@ -75,8 +84,21 @@ class UserBooking {
     final vehicleRaw = json['vehicle'];
     final vehicleObj = vehicleRaw is Map<String, dynamic> ? vehicleRaw : null;
 
-    final vehicleId = _pickString(json, const ['vehicle_id', 'vehicleId']).ifEmptyTry(
-        () => vehicleObj == null ? '' : _pickString(vehicleObj, const ['id', '_id']));
+    final vehicleDetailRaw = json['vehicle_detail'];
+    final vehicleDetailObj =
+        vehicleDetailRaw is Map<String, dynamic> ? vehicleDetailRaw : null;
+
+    final vehicleId =
+        _pickString(json, const ['vehicle_id', 'vehicleId']).ifEmptyTry(() {
+      if (vehicleObj != null) {
+        final v = _pickString(vehicleObj, const ['id', '_id']);
+        if (v.isNotEmpty) return v;
+      }
+      if (vehicleDetailObj != null) {
+        return _pickString(vehicleDetailObj, const ['id', '_id']);
+      }
+      return '';
+    });
 
     final vehicleName = vehicleObj != null
         ? _pickString(vehicleObj, const ['name', 'model', 'nickname'])
@@ -86,9 +108,30 @@ class UserBooking {
         ? _pickString(vehicleObj, const ['brand_name', 'brandName', 'brand'])
         : _pickString(json, const ['brand_name', 'brandName']);
 
-    final licensePlate = vehicleObj != null
-        ? _pickString(vehicleObj, const ['license_plate', 'licensePlate', 'plate'])
-        : _pickString(json, const ['license_plate', 'licensePlate']);
+    final licensePlate = _pickString(json, const [
+      'license_plate',
+      'licensePlate',
+    ]).ifEmptyTry(() {
+      if (vehicleObj != null) {
+        final v = _pickString(
+          vehicleObj,
+          const ['license_plate', 'licensePlate', 'plate'],
+        );
+        if (v.isNotEmpty) return v;
+      }
+      if (vehicleDetailObj != null) {
+        return _pickString(
+          vehicleDetailObj,
+          const ['license_plate', 'licensePlate', 'plate'],
+        );
+      }
+      return '';
+    });
+
+    final odoReading = _pickInt(json, const ['odo_reading', 'odoReading']) ??
+        (vehicleDetailObj == null
+            ? null
+            : _pickInt(vehicleDetailObj, const ['odo_reading', 'odoReading']));
 
     final services = _pickServiceNames(json);
     final description = _pickString(json, const ['description', 'note']);
@@ -103,6 +146,7 @@ class UserBooking {
       vehicleName: vehicleName,
       vehicleBrand: vehicleBrand,
       licensePlate: licensePlate,
+      odoReading: odoReading,
       serviceNames: services,
       description: description,
       status: status,
@@ -128,8 +172,27 @@ class UserBooking {
     return null;
   }
 
+  static int? _pickInt(Map<String, dynamic> json, List<String> keys) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) {
+        final parsed = int.tryParse(v);
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
+  }
+
   static List<String> _pickServiceNames(Map<String, dynamic> json) {
     final result = <String>[];
+
+    void addFromObject(dynamic raw) {
+      if (raw is! Map<String, dynamic>) return;
+      final name = _pickString(raw, const ['service_name', 'name', 'title']);
+      if (name.isNotEmpty) result.add(name);
+    }
 
     void addFromList(dynamic raw) {
       if (raw is! List) return;
@@ -151,6 +214,17 @@ class UserBooking {
     if (result.isEmpty) addFromList(json['services']);
     if (result.isEmpty) addFromList(json['service_types']);
     if (result.isEmpty) addFromList(json['service']);
+
+    // `/api/v1/user/booking` returns the service as a single embedded object
+    // under the PostgreSQL builder alias `json_build_object`.
+    if (result.isEmpty) {
+      final svc = json['json_build_object'];
+      if (svc is List) {
+        addFromList(svc);
+      } else {
+        addFromObject(svc);
+      }
+    }
     return result;
   }
 }

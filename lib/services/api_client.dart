@@ -167,6 +167,48 @@ class ApiClient {
     throw Exception(lastError ?? 'Google authentication failed');
   }
 
+  /// Authenticate with a Firebase Phone Auth id_token.
+  /// Calls the backend phone-auth endpoint and returns the backend JWT.
+  Future<String> authenticateWithPhoneToken(String firebaseIdToken) async {
+    final uri = Uri.parse('$baseUrl/api/v1/auth/phone');
+    try {
+      final response = await http.post(
+        uri,
+        headers: const {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({'id_token': firebaseIdToken}),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+
+        // Try top-level access_token first, then nested under 'data'.
+        final topLevel = data['access_token'];
+        if (topLevel is String && topLevel.isNotEmpty) return topLevel;
+
+        final nested = data['data'];
+        if (nested is Map<String, dynamic>) {
+          final nestedToken = nested['access_token'];
+          if (nestedToken is String && nestedToken.isNotEmpty) {
+            return nestedToken;
+          }
+        }
+
+        throw Exception(
+          'Phone auth succeeded but access_token missing: ${response.body}',
+        );
+      }
+
+      throw Exception(
+        'Phone auth failed (${response.statusCode}): ${response.body}',
+      );
+    } catch (e) {
+      throw Exception('Phone authentication error: $e');
+    }
+  }
+
   /// GET /api/v1/user — returns the full user object under response['data'].
   Future<Map<String, dynamic>> getCurrentUser() async {
     final response = await get('/api/v1/user');

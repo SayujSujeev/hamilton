@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "871124539933",
+    "project_id": "hamilton44-a092a",
+    "storage_bucket": "hamilton44-a092a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871124539933:android:5278653686bfbb237384f4",
+        "android_client_info": {
+          "package_name": "com.hamilton.car.hamilton_car_service"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBd8iEMpxv57Krp8WTwoVUqerhf0TL0yBM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,40 +1,52 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import '../widgets/get_started_primary_button.dart';
+import 'home_screen_wrapper.dart';
 import 'personal_details_screen.dart';
 
 const Color _kOtpRed = Color(0xFFB71C1C);
-const Color _kOtpButtonGrey = Color(0xFF9E9E9E);
 
-/// OTP verification — layout matches [PhoneRegistrationScreen].
+/// OTP verification — verifies with Firebase and exchanges for a backend JWT.
 class OtpVerificationScreen extends StatefulWidget {
-  const OtpVerificationScreen({super.key, required this.phoneNumber});
+  const OtpVerificationScreen({
+    super.key,
+    required this.phoneNumber,
+    required this.verificationId,
+    this.resendToken,
+    this.autoCredential,
+  });
 
   final String phoneNumber;
+  final String verificationId;
+  final int? resendToken;
+
+  /// Non-null on Android when Firebase auto-retrieves the OTP.
+  final PhoneAuthCredential? autoCredential;
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  static const int _otpLength = 4;
-  static const int _resendSeconds = 42;
+  static const int _otpLength = 6;
+  static const int _resendSeconds = 60;
 
-  /// Same as phone registration.
   static const double _designW = 390;
   static const double _designH = 844;
   static const double _formTop = 248;
   static const double _formLeft = 16;
   static const double _formContentW = 360;
   static const double _gapAboveContent = 40;
-  /// OTP row: total 232 design px = 4×52 + 3×8 gap.
-  static const double _otpBoxW = 52;
+  static const double _otpBoxW = 46;
   static const double _otpBoxH = 52;
-  static const double _otpGap = 8;
+  static const double _otpGap = 6;
 
   final List<TextEditingController> _controllers =
       List.generate(_otpLength, (_) => TextEditingController());
@@ -43,19 +55,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   late int _secondsLeft;
   Timer? _timer;
-
-  void _onOtpTextChanged() {
-    if (mounted) setState(() {});
-  }
+  bool _isVerifying = false;
+  String _currentVerificationId = '';
+  int? _resendToken;
 
   @override
   void initState() {
     super.initState();
+    _currentVerificationId = widget.verificationId;
+    _resendToken = widget.resendToken;
     _secondsLeft = _resendSeconds;
     _startTimer();
     for (final c in _controllers) {
       c.addListener(_onOtpTextChanged);
     }
+
+    // If Android auto-resolved the credential, verify immediately.
+    if (widget.autoCredential != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _verifyWithCredential(widget.autoCredential!);
+      });
+    }
+  }
+
+  void _onOtpTextChanged() {
+    if (mounted) setState(() {});
   }
 
   void _startTimer() {
@@ -65,7 +89,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (_secondsLeft == 0) {
         t.cancel();
       } else {
-        setState(() => _secondsLeft--);
+        if (mounted) setState(() => _secondsLeft--);
       }
     });
   }
@@ -87,6 +111,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         (c) => RegExp(r'^\d$').hasMatch(c.text.trim()),
       );
 
+  String get _enteredOtp =>
+      _controllers.map((c) => c.text.trim()).join();
+
   String get _timerLabel {
     final m = _secondsLeft ~/ 60;
     final s = _secondsLeft % 60;
@@ -96,6 +123,142 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   void _onDigitChanged(int index, String value) {
     if (value.isNotEmpty && index < _otpLength - 1) {
       _focusNodes[index + 1].requestFocus();
+    } else if (value.isEmpty && index > 0) {
+      _focusNodes[index - 1].requestFocus();
+    }
+  }
+
+  Future<void> _resendOtp() async {
+    _startTimer();
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: widget.phoneNumber,
+      forceResendingToken: _resendToken,
+      timeout: const Duration(seconds: 60),
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await _verifyWithCredential(credential);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (mounted) _showError(_friendlyError(e));
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (mounted) {
+          setState(() {
+            _currentVerificationId = verificationId;
+            _resendToken = resendToken;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OTP resent successfully.')),
+          );
+        }
+      },
+      codeAutoRetrievalTimeout: (_) {},
+    );
+  }
+
+  Future<void> _verifyOtp() async {
+    final credential = PhoneAuthProvider.credential(
+      verificationId: _currentVerificationId,
+      smsCode: _enteredOtp,
+    );
+    await _verifyWithCredential(credential);
+  }
+
+  Future<void> _verifyWithCredential(PhoneAuthCredential credential) async {
+    if (_isVerifying) return;
+    setState(() => _isVerifying = true);
+
+    try {
+      // 1. Sign in with Firebase.
+      final userCred =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // 2. Get the Firebase ID token.
+      final idToken = await userCred.user?.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Could not retrieve Firebase ID token.');
+      }
+
+      // 3. Exchange the Firebase ID token for a backend JWT.
+      final apiClient = ApiClient();
+      final backendJwt = await apiClient.authenticateWithPhoneToken(idToken);
+
+      // 4. Persist the backend JWT.
+      final authService = AuthService();
+      await authService.saveToken(backendJwt);
+
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+
+      // 5. Check profile completeness and route accordingly.
+      _navigateAfterAuth(apiClient);
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+        _showError(_friendlyError(e));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+        _showError(e.toString().replaceFirst('Exception: ', ''));
+      }
+    }
+  }
+
+  Future<void> _navigateAfterAuth(ApiClient apiClient) async {
+    try {
+      final userResponse = await apiClient.getCurrentUser();
+      final userData = userResponse['data'] as Map<String, dynamic>?;
+      final bool isProfileComplete = userData != null &&
+          userData['firstname'] != null &&
+          userData['lastname'] != null;
+
+      if (!mounted) return;
+      _pushReplacement(
+        isProfileComplete
+            ? const HomeScreenWrapper()
+            : PersonalDetailsScreen(phoneNumber: widget.phoneNumber),
+      );
+    } catch (_) {
+      if (mounted) {
+        _pushReplacement(PersonalDetailsScreen(phoneNumber: widget.phoneNumber));
+      }
+    }
+  }
+
+  void _pushReplacement(Widget screen) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, __, ___) => screen,
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  String _friendlyError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-verification-code':
+        return 'Wrong OTP. Please check the code and try again.';
+      case 'session-expired':
+        return 'OTP expired. Please request a new one.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return e.message ?? 'Verification failed. Please try again.';
     }
   }
 
@@ -125,133 +288,124 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           child: GetStartedPrimaryButton(
             width: buttonW,
             height: buttonH,
-            label: 'Verify OTP',
-            enabled: _otpComplete,
-            onPressed: _otpComplete
-                ? () {
-                    Navigator.of(context).push(
-                      PageRouteBuilder<void>(
-                        pageBuilder:
-                            (context, animation, secondaryAnimation) =>
-                                PersonalDetailsScreen(
-                                  phoneNumber: widget.phoneNumber,
-                                ),
-                        transitionsBuilder: (context, animation,
-                            secondaryAnimation, child) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          );
-                        },
-                        transitionDuration:
-                            const Duration(milliseconds: 300),
-                      ),
-                    );
-                  }
-                : null,
+            label: _isVerifying ? 'Verifying…' : 'Verify OTP',
+            enabled: _otpComplete && !_isVerifying,
+            onPressed: (_otpComplete && !_isVerifying) ? _verifyOtp : null,
           ),
         ),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Stack(
         children: [
-          SizedBox(
-            height: headerH,
-            child: _OtpHeader(
-              textTheme: textTheme,
-              phoneNumber: widget.phoneNumber,
-            ),
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: EdgeInsets.only(left: _formLeft * sx),
-                child: SizedBox(
-                  width: _formContentW * sx,
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(height: _gapAboveContent * sy),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: headerH,
+                child: _OtpHeader(
+                  textTheme: textTheme,
+                  phoneNumber: widget.phoneNumber,
+                ),
+              ),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: _formLeft * sx),
+                    child: SizedBox(
+                      width: _formContentW * sx,
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            for (var i = 0; i < _otpLength; i++) ...[
-                              if (i > 0) SizedBox(width: _otpGap * sx),
-                              _OtpBox(
-                                controller: _controllers[i],
-                                focusNode: _focusNodes[i],
-                                width: _otpBoxW * sm,
-                                height: _otpBoxH * sm,
-                                scaleMin: sm,
-                                cornerRadius: 14 * sm,
-                                onChanged: (v) => _onDigitChanged(i, v),
-                              ),
-                            ],
-                          ],
-                        ),
-                        SizedBox(height: 20 * sy),
-                        Row(
-                          children: [
-                            Text(
-                              "Didn't receive it?",
-                              style: GoogleFonts.dmSans(
-                                color: const Color(0xFF767676),
-                                fontSize: 12 * sm,
-                                fontWeight: FontWeight.w400,
-                              ),
+                            SizedBox(height: _gapAboveContent * sy),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < _otpLength; i++) ...[
+                                  if (i > 0) SizedBox(width: _otpGap * sx),
+                                  _OtpBox(
+                                    controller: _controllers[i],
+                                    focusNode: _focusNodes[i],
+                                    width: _otpBoxW * sm,
+                                    height: _otpBoxH * sm,
+                                    scaleMin: sm,
+                                    cornerRadius: 14 * sm,
+                                    onChanged: (v) => _onDigitChanged(i, v),
+                                  ),
+                                ],
+                              ],
                             ),
-                            SizedBox(width: 50 * sx),
-                            if (_secondsLeft > 0)
-                              Text(
-                                'Resend in ',
-                                style: GoogleFonts.dmSans(
-                                  color: const Color(0xFF767676),
-                                  fontSize: 12 * sm,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            if (_secondsLeft > 0)
-                              Text(
-                                _timerLabel,
-                                style: GoogleFonts.dmSans(
-                                  color: _kOtpRed,
-                                  fontSize: 12 * sm,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            if (_secondsLeft == 0)
-                              GestureDetector(
-                                onTap: _startTimer,
-                                child: Text(
-                                  'Resend',
+                            SizedBox(height: 20 * sy),
+                            Row(
+                              children: [
+                                Text(
+                                  "Didn't receive it?",
                                   style: GoogleFonts.dmSans(
-                                    color: _kOtpRed,
+                                    color: const Color(0xFF767676),
                                     fontSize: 12 * sm,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
-                              ),
+                                SizedBox(width: 50 * sx),
+                                if (_secondsLeft > 0)
+                                  Text(
+                                    'Resend in ',
+                                    style: GoogleFonts.dmSans(
+                                      color: const Color(0xFF767676),
+                                      fontSize: 12 * sm,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                if (_secondsLeft > 0)
+                                  Text(
+                                    _timerLabel,
+                                    style: GoogleFonts.dmSans(
+                                      color: _kOtpRed,
+                                      fontSize: 12 * sm,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                if (_secondsLeft == 0)
+                                  GestureDetector(
+                                    onTap: _resendOtp,
+                                    child: Text(
+                                      'Resend',
+                                      style: GoogleFonts.dmSans(
+                                        color: _kOtpRed,
+                                        fontSize: 12 * sm,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
+          // Full-screen loading overlay while verifying.
+          if (_isVerifying)
+            Container(
+              color: Colors.black.withValues(alpha: 0.35),
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Same header structure as [_RegistrationHeader] + back + OTP copy.
+/// Same header structure as the phone registration screen.
 class _OtpHeader extends StatelessWidget {
   const _OtpHeader({
     required this.textTheme,
@@ -315,7 +469,6 @@ class _OtpHeader extends StatelessWidget {
                           'Please Check Your\nMessages',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.left,
                           style: GoogleFonts.dmSerifText(
                             color: Colors.white,
                             fontWeight: FontWeight.w400,
@@ -343,7 +496,7 @@ class _OtpHeader extends StatelessWidget {
                                 ),
                             children: [
                               const TextSpan(
-                                text: 'Enter the 4-digit code sent to ',
+                                text: 'Enter the 6-digit code sent to ',
                               ),
                               TextSpan(
                                 text: phoneNumber,
@@ -393,7 +546,6 @@ class _OtpBox extends StatelessWidget {
     required this.onChanged,
   });
 
-  /// Inner horizontal inset (Figma).
   static const double _innerPaddingH = 8;
   static const double _fontSizeDesign = 14;
 

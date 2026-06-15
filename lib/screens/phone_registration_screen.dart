@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,11 +7,32 @@ import '../widgets/get_started_primary_button.dart';
 import 'otp_verification_screen.dart';
 
 const Color _kRedAccent = Color(0xFFB71C1C);
-const Color _kOtpButtonGrey = Color(0xFF9E9E9E);
 /// Secondary promo line (DM Sans) — ash gray on white.
 const Color _kAshFont = Color(0xFF8A8A8A);
 /// Terms row body copy (Figma fill #767676).
 const Color _kTermsBodyColor = Color(0xFF767676);
+
+class _CountryInfo {
+  const _CountryInfo({
+    required this.flag,
+    required this.name,
+    required this.dialCode,
+    required this.minDigits,
+    required this.maxDigits,
+  });
+
+  final String flag;
+  final String name;
+  final String dialCode;
+  final int minDigits;
+  final int maxDigits;
+}
+
+const List<_CountryInfo> _kCountries = [
+  _CountryInfo(flag: '🇸🇦', name: 'Saudi Arabia', dialCode: '+966', minDigits: 9, maxDigits: 9),
+  _CountryInfo(flag: '🇮🇳', name: 'India',        dialCode: '+91',  minDigits: 10, maxDigits: 10),
+  _CountryInfo(flag: '🇶🇦', name: 'Qatar',        dialCode: '+974', minDigits: 8, maxDigits: 8),
+];
 
 /// First step of signup: mobile number + terms, matching registration mockup.
 class PhoneRegistrationScreen extends StatefulWidget {
@@ -23,6 +45,8 @@ class PhoneRegistrationScreen extends StatefulWidget {
 
 class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen> {
   bool _termsAccepted = false;
+  bool _isLoading = false;
+  _CountryInfo _selectedCountry = _kCountries.first;
   late final TextEditingController _phoneController;
 
   static const double _designW = 390;
@@ -54,7 +78,184 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen> {
 
   bool get _canSubmitOtp {
     final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    return _termsAccepted && digits.length >= 9;
+    final normalized =
+        digits.startsWith('0') ? digits.substring(1) : digits;
+    return _termsAccepted &&
+        normalized.length >= _selectedCountry.minDigits;
+  }
+
+  Future<void> _sendOtp() async {
+    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    // Strip leading 0 if user typed it (common in India/Saudi).
+    final normalized = digits.startsWith('0') ? digits.substring(1) : digits;
+    final phoneNumber = '${_selectedCountry.dialCode}$normalized';
+
+    setState(() => _isLoading = true);
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      // Auto-retrieval on Android (SMS auto-read).
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Android only: sign in automatically without OTP entry.
+        try {
+          final userCred =
+              await FirebaseAuth.instance.signInWithCredential(credential);
+          final idToken = await userCred.user?.getIdToken();
+          if (idToken != null && mounted) {
+            _navigateToOtp(
+              phoneNumber: phoneNumber,
+              verificationId: '',
+              autoCredential: credential,
+            );
+          }
+        } catch (_) {
+          // Fall through — user will enter OTP manually.
+        }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showError(_friendlyError(e));
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _navigateToOtp(
+            phoneNumber: phoneNumber,
+            verificationId: verificationId,
+            resendToken: resendToken,
+          );
+        }
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        // Timeout reached; OTP entry is still possible.
+      },
+    );
+  }
+
+  void _navigateToOtp({
+    required String phoneNumber,
+    required String verificationId,
+    int? resendToken,
+    PhoneAuthCredential? autoCredential,
+  }) {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            OtpVerificationScreen(
+              phoneNumber: phoneNumber,
+              verificationId: verificationId,
+              resendToken: resendToken,
+              autoCredential: autoCredential,
+            ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDDDDDD),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Select Country',
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final country in _kCountries)
+                ListTile(
+                  leading: Text(
+                    country.flag,
+                    style: const TextStyle(fontSize: 26),
+                  ),
+                  title: Text(
+                    country.name,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  trailing: Text(
+                    country.dialCode,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: const Color(0xFF767676),
+                    ),
+                  ),
+                  selected: country.dialCode == _selectedCountry.dialCode,
+                  selectedColor: _kRedAccent,
+                  selectedTileColor: _kRedAccent.withValues(alpha: 0.06),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _selectedCountry = country;
+                      _phoneController.clear();
+                    });
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _friendlyError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-phone-number':
+        return 'Invalid phone number. Please check and try again.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'quota-exceeded':
+        return 'SMS quota exceeded. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return e.message ?? 'An error occurred. Please try again.';
+    }
   }
 
   @override
@@ -88,29 +289,10 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen> {
           child: GetStartedPrimaryButton(
             width: buttonW,
             height: buttonH,
-            label: 'Get OTP',
-            enabled: _canSubmitOtp,
-            onPressed: _canSubmitOtp
-                ? () {
-                    final digits = _phoneController.text
-                        .replaceAll(RegExp(r'\D'), '');
-                    final formatted = '+966 $digits';
-                    Navigator.of(context).push(
-                      PageRouteBuilder<void>(
-                        pageBuilder: (context, animation,
-                                secondaryAnimation) =>
-                            OtpVerificationScreen(
-                                phoneNumber: formatted),
-                        transitionsBuilder: (context, animation,
-                            secondaryAnimation, child) {
-                          return FadeTransition(
-                              opacity: animation, child: child);
-                        },
-                        transitionDuration:
-                            const Duration(milliseconds: 300),
-                      ),
-                    );
-                  }
+            label: _isLoading ? 'Sending OTP…' : 'Get OTP',
+            enabled: _canSubmitOtp && !_isLoading,
+            onPressed: (_canSubmitOtp && !_isLoading)
+                ? _sendOtp
                 : null,
           ),
         ),
@@ -144,6 +326,8 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen> {
                       onTermsChanged: (v) =>
                           setState(() => _termsAccepted = v),
                       textTheme: textTheme,
+                      selectedCountry: _selectedCountry,
+                      onCountryTap: _showCountryPicker,
                     ),
                   ),
                 ),
@@ -280,6 +464,8 @@ class _RegistrationForm extends StatelessWidget {
     required this.termsAccepted,
     required this.onTermsChanged,
     required this.textTheme,
+    required this.selectedCountry,
+    required this.onCountryTap,
   });
 
   final double scaleX;
@@ -292,6 +478,8 @@ class _RegistrationForm extends StatelessWidget {
   final bool termsAccepted;
   final ValueChanged<bool> onTermsChanged;
   final TextTheme textTheme;
+  final _CountryInfo selectedCountry;
+  final VoidCallback onCountryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +503,7 @@ class _RegistrationForm extends StatelessWidget {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () {},
+                    onTap: onCountryTap,
                     borderRadius: BorderRadius.horizontal(
                       left: Radius.circular(13 * scaleMin),
                     ),
@@ -328,26 +516,23 @@ class _RegistrationForm extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '🇸🇦',
+                            selectedCountry.flag,
                             style: TextStyle(fontSize: 20 * scaleMin),
                           ),
-                          // SizedBox(width: 8 * scaleX),
-                          // Text(
-                          //   '+966',
-                          //   style: textTheme.bodyLarge?.copyWith(
-                          //         fontWeight: FontWeight.w600,
-                          //         fontSize: 15 * scaleMin,
-                          //       ) ??
-                          //       TextStyle(
-                          //         fontSize: 15 * scaleMin,
-                          //         fontWeight: FontWeight.w600,
-                          //       ),
-                          // ),
-                          // SizedBox(width: 4 * scaleX),
+                          SizedBox(width: 6 * scaleX),
+                          Text(
+                            selectedCountry.dialCode,
+                            style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14 * scaleMin,
+                              color: const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                          SizedBox(width: 2 * scaleX),
                           Icon(
                             Icons.keyboard_arrow_down_rounded,
                             color: Colors.grey.shade700,
-                            size: 22 * scaleMin,
+                            size: 20 * scaleMin,
                           ),
                         ],
                       ),
@@ -365,7 +550,7 @@ class _RegistrationForm extends StatelessWidget {
                     keyboardType: TextInputType.phone,
                     style: TextStyle(fontSize: 15 * scaleMin),
                     decoration: InputDecoration(
-                      hintText: 'Mobile Number',
+                      hintText: 'Enter ${selectedCountry.maxDigits}-digit number',
                       hintStyle: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 15 * scaleMin,

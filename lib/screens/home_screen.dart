@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../widgets/get_started_primary_button.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
 import 'profile_screen.dart';
+import 'phone_registration_screen.dart';
 import 'service_history_screen.dart';
 import 'services_screen.dart';
 import 'upcoming_booking_detail_screen.dart';
@@ -1340,12 +1342,12 @@ class _DarkActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 70,
+      height: 52,
       child: Stack(
         children: [
           GetStartedPrimaryButton(
             width: double.infinity,
-            height: 70,
+            height: 52,
             label: '',
             onPressed: onPressed ?? () {},
           ),
@@ -1553,10 +1555,67 @@ class _BottomNavBar extends StatelessWidget {
                 );
               },
             ),
-            const _NavItem(icon: Icons.settings_outlined, label: 'Settings'),
+            _NavItem(
+              icon: Icons.logout,
+              label: 'Logout',
+              onTap: () => _confirmLogout(context),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  static Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Log out?',
+          style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'You will need to sign in again with your phone number.',
+          style: GoogleFonts.dmSans(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB71C1C),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+              'Log out',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final authService = AuthService();
+    await authService.clearToken();
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
+    try {
+      await authService.signOutGoogle();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const PhoneRegistrationScreen()),
+      (_) => false,
     );
   }
 }

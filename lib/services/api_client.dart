@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 import '../models/user_model.dart';
 import '../models/vehicle_model.dart';
+import '../models/service_history.dart';
 
 class ApiClient {
   static const String baseUrl = 'https://hamilton-be-dev.onrender.com/api/v1';
@@ -325,14 +326,7 @@ class ApiClient {
   ///       "id": "...",
   ///       "booking_date": "2026-05-13",
   ///       "slot": { "id": "...", "slot_timing": "08:00" },
-  ///       "description": "...",
-  ///       "status": "confirmed",
-  ///       "json_build_object": { "id": "...", "service_name": "..." },
-  ///       "vehicle_detail": {
-  ///         "id": "...",
-  ///         "license_plate": "...",
-  ///         "odo_reading": 10001
-  ///       }
+  ///       ...
   ///     }
   ///   ]
   /// }
@@ -340,6 +334,34 @@ class ApiClient {
   Future<Map<String, dynamic>> getUserBookings() async {
     final response = await get('/user/booking');
     return parseJson(response);
+  }
+
+  /// GET /api/v1/user/service-history — returns past service records.
+  Future<List<ServiceHistory>> getUserServiceHistory() async {
+    final response = await get('/user/service-history');
+    final json = parseJson(response);
+    if (kDebugMode) {
+      debugPrint('[ApiClient] /user/service-history raw data: ${json['data']}');
+    }
+
+    final raw = json['data'];
+    List<dynamic> rows = const [];
+    if (raw is List) {
+      rows = raw;
+    } else if (raw is Map<String, dynamic>) {
+      for (final key in const ['history', 'service_history', 'data', 'items']) {
+        final value = raw[key];
+        if (value is List) {
+          rows = value;
+          break;
+        }
+      }
+    }
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(ServiceHistory.fromJson)
+        .toList();
   }
 
   /// GET /api/v1/brand — returns a paginated list of all brands.

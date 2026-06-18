@@ -188,8 +188,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       setState(() => _isVerifying = false);
 
-      // 5. Route using JWT claims (is_profile_completed, is_vehicle_added).
-      _navigateAfterAuth(backendJwt);
+      // 5. Route using JWT + API checks (profile & vehicle already done → Home).
+      await _navigateAfterAuth(backendJwt);
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() => _isVerifying = false);
@@ -203,11 +203,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  void _navigateAfterAuth(String backendJwt) {
+  Future<void> _navigateAfterAuth(String backendJwt) async {
     if (!mounted) return;
-    _pushReplacement(
-      authDestinationForToken(backendJwt, phoneNumber: widget.phoneNumber),
-    );
+    try {
+      final destination = await resolveAuthDestination(
+        token: backendJwt,
+        phoneNumber: widget.phoneNumber,
+      );
+      if (!mounted) return;
+      _pushReplacement(destination);
+    } catch (_) {
+      if (!mounted) return;
+      _pushReplacement(authDestinationForToken(
+        backendJwt,
+        phoneNumber: widget.phoneNumber,
+      ));
+    }
   }
 
   void _pushReplacement(Widget screen) {

@@ -3,13 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../screens/phone_registration_screen.dart';
-import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_navigation.dart';
-import '../utils/jwt_utils.dart';
 import '../widgets/hamilton_splash_background.dart';
 
-/// Full-screen splash — decides where to go based on stored JWT claims.
+/// Full-screen splash — routes based on stored JWT + live API checks.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({
     super.key,
@@ -33,31 +31,27 @@ class _SplashScreenState extends State<SplashScreen> {
     final authService = AuthService();
     final token = await authService.getToken();
 
-    // No token stored → user has never logged in (or was logged out).
-    if (token == null) return const PhoneRegistrationScreen();
-
-    // Token expired → clear it and send to login.
-    if (JwtClaims.isExpiredToken(token)) {
+    try {
+      return await resolveAuthDestination(token: token);
+    } on AuthExpiredException {
       await authService.clearToken();
       return const PhoneRegistrationScreen();
-    }
-
-    // Validate the token against the backend.
-    try {
-      await ApiClient().getCurrentUser();
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('401') ||
-          msg.contains('403') ||
-          msg.contains('Authentication expired')) {
+      if (_isAuthError(e)) {
         await authService.clearToken();
         return const PhoneRegistrationScreen();
       }
-      // Network error etc. — token may still be fine, proceed.
+      // Network error — if we still have a token, try JWT-only routing.
+      if (token != null) {
+        return authDestinationForToken(token);
+      }
+      return const PhoneRegistrationScreen();
     }
+  }
 
-    // Token is valid — read claims and route accordingly.
-    return authDestinationForToken(token);
+  bool _isAuthError(Object e) {
+    final msg = e.toString();
+    return msg.contains('401') || msg.contains('Authentication expired');
   }
 
   Future<void> _goNext() async {

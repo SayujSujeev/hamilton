@@ -14,6 +14,8 @@ class JwtClaims {
   final DateTime? expiresAt;
   final String? subject;
 
+  bool get isFullyOnboarded => isProfileCompleted && isVehicleAdded;
+
   bool get isExpired {
     final exp = expiresAt;
     if (exp == null) return false;
@@ -32,10 +34,16 @@ class JwtClaims {
 
       return JwtClaims(
         isProfileCompleted: _pickBool(
-          map['is_profile_completed'] ?? map['isProfileCompleted'],
+          map['is_profile_completed'] ??
+              map['isProfileCompleted'] ??
+              map['profile_completed'] ??
+              map['profileCompleted'],
         ),
         isVehicleAdded: _pickBool(
-          map['is_vehicle_added'] ?? map['isVehicleAdded'],
+          map['is_vehicle_added'] ??
+              map['isVehicleAdded'] ??
+              map['vehicle_added'] ??
+              map['vehicleAdded'],
         ),
         expiresAt: _pickExpiry(map['exp']),
         subject: map['sub']?.toString(),

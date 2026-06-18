@@ -10,6 +10,7 @@ import '../widgets/get_started_primary_button.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
 import 'profile_screen.dart';
+import 'service_history_screen.dart';
 import 'services_screen.dart';
 import 'upcoming_booking_detail_screen.dart';
 import 'vehicle_detail_screen.dart';
@@ -1541,7 +1542,17 @@ class _BottomNavBar extends StatelessWidget {
                 );
               },
             ),
-            const _NavItem(icon: Icons.shopping_bag_outlined, label: 'Shop'),
+            _NavItem(
+              icon: Icons.history,
+              label: 'History',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ServiceHistoryScreen(),
+                  ),
+                );
+              },
+            ),
             const _NavItem(icon: Icons.settings_outlined, label: 'Settings'),
           ],
         ),

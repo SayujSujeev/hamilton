@@ -45,10 +45,17 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
       // 3. Persist the JWT.
       await _authService.saveToken(jwtToken);
 
-      // 4. Route using JWT claims (is_profile_completed, is_vehicle_added).
+      // 4. Route using JWT + API checks.
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _navigateTo(authDestinationForToken(jwtToken));
+      try {
+        final destination = await resolveAuthDestination(token: jwtToken);
+        if (!mounted) return;
+        _navigateTo(destination);
+      } catch (_) {
+        if (!mounted) return;
+        _navigateTo(authDestinationForToken(jwtToken));
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);

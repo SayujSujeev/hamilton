@@ -3,11 +3,36 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../widgets/get_started_primary_button.dart';
+import '../services/api_client.dart';
+import '../utils/auth_navigation.dart';
 import 'add_new_vehicle_screen.dart';
 import 'home_screen_wrapper.dart';
 
-class AddFirstVehicleScreen extends StatelessWidget {
+class AddFirstVehicleScreen extends StatefulWidget {
   const AddFirstVehicleScreen({super.key});
+
+  @override
+  State<AddFirstVehicleScreen> createState() => _AddFirstVehicleScreenState();
+}
+
+class _AddFirstVehicleScreenState extends State<AddFirstVehicleScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _redirectIfVehicleExists();
+  }
+
+  Future<void> _redirectIfVehicleExists() async {
+    try {
+      final status = await fetchOnboardingStatus(ApiClient());
+      if (!mounted) return;
+      if (status.isVehicleAdded) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const HomeScreenWrapper()),
+        );
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {

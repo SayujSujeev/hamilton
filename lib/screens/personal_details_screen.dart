@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'add_first_vehicle_screen.dart';
 import '../services/api_client.dart';
+import '../utils/auth_navigation.dart';
 import '../widgets/get_started_primary_button.dart';
+import 'home_screen_wrapper.dart';
 
 const Color _kRedAccent = Color(0xFFB71C1C);
 const Color _kFieldFill = Color(0xFFF2F2F2);
@@ -43,6 +45,29 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     super.initState();
     _nameController.addListener(_onFieldChanged);
     _emailController.addListener(_onFieldChanged);
+    _redirectIfAlreadyComplete();
+  }
+
+  Future<void> _redirectIfAlreadyComplete() async {
+    try {
+      final status = await fetchOnboardingStatus(_apiClient);
+      if (!mounted) return;
+      if (status.isFullyOnboarded) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const HomeScreenWrapper()),
+        );
+        return;
+      }
+      if (status.isProfileCompleted && !status.isVehicleAdded) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => const AddFirstVehicleScreen(),
+          ),
+        );
+      }
+    } catch (_) {
+      // Stay on this screen — user can fill the form manually.
+    }
   }
 
   @override

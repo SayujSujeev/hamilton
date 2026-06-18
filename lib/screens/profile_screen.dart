@@ -92,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _navigateToEditProfile() async {
     if (_user == null) return;
-    
+
     final updatedUser = await Navigator.of(context).push<UserModel>(
       MaterialPageRoute(
         builder: (_) => EditProfileScreen(user: _user!),
@@ -110,131 +110,150 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
-      body: Column(
-        children: [
-          _ProfileHeader(
-            user: _user,
-            isRefreshing: _isRefreshing,
-            onBack: () => Navigator.of(context).pop(),
-            onRefresh: () => _loadUser(isRefresh: true),
-            onEdit: _navigateToEditProfile,
+      body: RefreshIndicator(
+        color: const Color(0xFFB71C1C),
+        onRefresh: () => _loadUser(isRefresh: true),
+        edgeOffset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
           ),
-          Expanded(
-            child: _buildBody(),
-          ),
-        ],
+          slivers: [
+            _ProfileSliverAppBar(
+              user: _user,
+              isRefreshing: _isRefreshing,
+              onBack: () => Navigator.of(context).pop(),
+              onRefresh: () => _loadUser(isRefresh: true),
+              onEdit: _navigateToEditProfile,
+            ),
+            ..._buildContentSlivers(),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  List<Widget> _buildContentSlivers() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB71C1C)),
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB71C1C)),
+            ),
+          ),
         ),
-      );
+      ];
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 56),
-              const SizedBox(height: 12),
-              Text(
-                'Unable to load profile',
-                style: GoogleFonts.dmSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF1F1F1F),
-                ),
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 56),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Unable to load profile',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1F1F1F),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: const Color(0xFF6B6B6B),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  GetStartedPrimaryButton(
+                    width: 180,
+                    height: 46,
+                    label: 'Retry',
+                    onPressed: _loadUser,
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: const Color(0xFF6B6B6B),
-                ),
-              ),
-              const SizedBox(height: 18),
-              GetStartedPrimaryButton(
-                width: 180,
-                height: 46,
-                label: 'Retry',
-                onPressed: _loadUser,
-              ),
-            ],
+            ),
           ),
         ),
-      );
+      ];
     }
 
     final user = _user;
     if (user == null) {
-      return const SizedBox.shrink();
+      return const [SliverToBoxAdapter(child: SizedBox.shrink())];
     }
 
-    return RefreshIndicator(
-      color: const Color(0xFFB71C1C),
-      onRefresh: () => _loadUser(isRefresh: true),
-      child: ListView(
+    return [
+      SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-        children: [
-          _ProfileSectionCard(
-            title: 'Basic Information',
-            children: [
-              _ProfileInfoRow(label: 'Name', value: _profileName(user)),
-              _ProfileInfoRow(label: 'Username', value: _valueOrDash(user.username)),
-              _ProfileInfoRow(label: 'Email', value: _valueOrDash(user.email)),
-              _ProfileInfoRow(label: 'Gender', value: _valueOrDash(user.gender)),
-              _ProfileInfoRow(
-                label: 'Status',
-                value: user.isActive ? 'Active' : 'Inactive',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _ProfileSectionCard(
-            title: 'Contact Information',
-            children: [
-              _ProfileInfoRow(label: 'Mobile', value: _valueOrDash(user.mobileNo)),
-              _ProfileInfoRow(
-                label: 'WhatsApp',
-                value: _valueOrDash(user.whatsappNo),
-              ),
-              _ProfileInfoRow(label: 'Address', value: _valueOrDash(user.address)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _ProfileSectionCard(
-            title: 'Account Metadata',
-            children: [
-              _ProfileInfoRow(label: 'Role ID', value: user.roleId.toString()),
-              _ProfileInfoRow(
-                label: 'Created On',
-                value: _dateLabel(user.createdAt),
-              ),
-              _ProfileInfoRow(
-                label: 'Last Updated',
-                value: _dateLabel(user.updatedAt),
-              ),
-            ],
-          ),
-        ],
+        sliver: SliverList(
+          delegate: SliverChildListDelegate([
+            _ProfileSectionCard(
+              title: 'Basic Information',
+              children: [
+                _ProfileInfoRow(label: 'Name', value: _profileName(user)),
+                _ProfileInfoRow(
+                  label: 'Username',
+                  value: _valueOrDash(user.username),
+                ),
+                _ProfileInfoRow(label: 'Email', value: _valueOrDash(user.email)),
+                _ProfileInfoRow(label: 'Gender', value: _valueOrDash(user.gender)),
+                _ProfileInfoRow(
+                  label: 'Status',
+                  value: user.isActive ? 'Active' : 'Inactive',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ProfileSectionCard(
+              title: 'Contact Information',
+              children: [
+                _ProfileInfoRow(label: 'Mobile', value: _valueOrDash(user.mobileNo)),
+                _ProfileInfoRow(
+                  label: 'WhatsApp',
+                  value: _valueOrDash(user.whatsappNo),
+                ),
+                _ProfileInfoRow(label: 'Address', value: _valueOrDash(user.address)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ProfileSectionCard(
+              title: 'Account Metadata',
+              children: [
+                _ProfileInfoRow(label: 'Role ID', value: user.roleId.toString()),
+                _ProfileInfoRow(
+                  label: 'Created On',
+                  value: _dateLabel(user.createdAt),
+                ),
+                _ProfileInfoRow(
+                  label: 'Last Updated',
+                  value: _dateLabel(user.updatedAt),
+                ),
+              ],
+            ),
+          ]),
+        ),
       ),
-    );
+    ];
   }
 }
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({
+class _ProfileSliverAppBar extends StatelessWidget {
+  const _ProfileSliverAppBar({
     required this.user,
     required this.isRefreshing,
     required this.onBack,
@@ -252,9 +271,13 @@ class _ProfileHeader extends StatelessWidget {
     if (user == null) return 'U';
     final first = user.firstname.trim();
     final last = user.lastname.trim();
-    final combined = '${first.isNotEmpty ? first[0] : ''}${last.isNotEmpty ? last[0] : ''}'.toUpperCase();
+    final combined =
+        '${first.isNotEmpty ? first[0] : ''}${last.isNotEmpty ? last[0] : ''}'
+            .toUpperCase();
     if (combined.isNotEmpty) return combined;
-    if (user.username.trim().isNotEmpty) return user.username.trim()[0].toUpperCase();
+    if (user.username.trim().isNotEmpty) {
+      return user.username.trim()[0].toUpperCase();
+    }
     return 'U';
   }
 
@@ -267,104 +290,112 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 246,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: DecoratedBox(
+    final imageUrl = user?.imageUrl?.trim();
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+
+    return SliverAppBar(
+      expandedHeight: 206,
+      pinned: true,
+      stretch: true,
+      backgroundColor: const Color(0xFF43001E),
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      leading: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: onBack,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, color: Colors.white),
+          onPressed: onEdit,
+        ),
+        IconButton(
+          icon: Icon(
+            Icons.refresh,
+            color: isRefreshing ? Colors.white54 : Colors.white,
+          ),
+          onPressed: isRefreshing ? null : onRefresh,
+        ),
+      ],
+      flexibleSpace: FlexibleSpaceBar(
+        stretchModes: const [
+          StretchMode.zoomBackground,
+          StretchMode.blurBackground,
+        ],
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            const DecoratedBox(
               decoration: BoxDecoration(
                 color: Color(0xFF43001E),
                 image: DecorationImage(
-                  image: AssetImage('assets/images/registration_header_background.png'),
+                  image: AssetImage(
+                    'assets/images/registration_header_background.png',
+                  ),
                   fit: BoxFit.cover,
                   alignment: Alignment.topLeft,
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: onBack,
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 22,
-                        ),
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 56, 16, 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your Profile',
+                      style: GoogleFonts.dmSerifText(
+                        color: Colors.white,
+                        fontSize: 33,
+                        fontWeight: FontWeight.w400,
+                        height: 1.05,
                       ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: onEdit,
-                        child: const Icon(
-                          Icons.edit_outlined,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: isRefreshing ? null : onRefresh,
-                        child: Icon(
-                          Icons.refresh,
-                          color: isRefreshing ? Colors.white54 : Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    'Your Profile',
-                    style: GoogleFonts.dmSerifText(
-                      color: Colors.white,
-                      fontSize: 33,
-                      fontWeight: FontWeight.w400,
-                      height: 1.05,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.white.withValues(alpha: 0.18),
-                        child: Text(
-                          _initials(user),
-                          style: GoogleFonts.dmSans(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
+                    SizedBox(height: 15),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Colors.white.withValues(alpha: 0.18),
+                          backgroundImage:
+                              hasImage ? NetworkImage(imageUrl) : null,
+                          child: hasImage
+                              ? null
+                              : Text(
+                                  _initials(user),
+                                  style: GoogleFonts.dmSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _name(user),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _name(user),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.dmSans(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

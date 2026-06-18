@@ -7,9 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../utils/auth_navigation.dart';
 import '../widgets/get_started_primary_button.dart';
-import 'home_screen_wrapper.dart';
-import 'personal_details_screen.dart';
 
 const Color _kOtpRed = Color(0xFFB71C1C);
 
@@ -189,8 +188,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       setState(() => _isVerifying = false);
 
-      // 5. Check profile completeness and route accordingly.
-      _navigateAfterAuth(apiClient);
+      // 5. Route using JWT claims (is_profile_completed, is_vehicle_added).
+      _navigateAfterAuth(backendJwt);
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() => _isVerifying = false);
@@ -204,25 +203,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  Future<void> _navigateAfterAuth(ApiClient apiClient) async {
-    try {
-      final userResponse = await apiClient.getCurrentUser();
-      final userData = userResponse['data'] as Map<String, dynamic>?;
-      final bool isProfileComplete = userData != null &&
-          userData['firstname'] != null &&
-          userData['lastname'] != null;
-
-      if (!mounted) return;
-      _pushReplacement(
-        isProfileComplete
-            ? const HomeScreenWrapper()
-            : PersonalDetailsScreen(phoneNumber: widget.phoneNumber),
-      );
-    } catch (_) {
-      if (mounted) {
-        _pushReplacement(PersonalDetailsScreen(phoneNumber: widget.phoneNumber));
-      }
-    }
+  void _navigateAfterAuth(String backendJwt) {
+    if (!mounted) return;
+    _pushReplacement(
+      authDestinationForToken(backendJwt, phoneNumber: widget.phoneNumber),
+    );
   }
 
   void _pushReplacement(Widget screen) {

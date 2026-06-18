@@ -44,12 +44,19 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
       }
 
       final vehicles = await _userService.getUserVehicles();
-      final user = await _userService.getCurrentUser();
+
+      String? profileImageUrl;
+      try {
+        final user = await _userService.getCurrentUser();
+        profileImageUrl = user.imageUrl;
+      } catch (_) {
+        // Profile is optional for home — vehicles can still render.
+      }
 
       if (mounted) {
         setState(() {
           _vehicles = vehicles;
-          _profileImageUrl = user.imageUrl;
+          _profileImageUrl = profileImageUrl;
           _isLoading = false;
         });
       }

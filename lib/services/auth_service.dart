@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../utils/jwt_utils.dart';
+
 class AuthService {
   static const String _tokenKey = 'jwt_token';
 
@@ -58,9 +60,22 @@ class AuthService {
     await _storage.write(key: _tokenKey, value: token);
   }
 
-  /// Get saved JWT token.
+  /// Get saved JWT token. Clears expired tokens automatically.
   Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    final token = await _storage.read(key: _tokenKey);
+    if (token == null || token.isEmpty) return null;
+    if (JwtClaims.isExpiredToken(token)) {
+      await clearToken();
+      return null;
+    }
+    return token;
+  }
+
+  /// Decode onboarding flags from the stored backend JWT.
+  Future<JwtClaims?> getSessionClaims() async {
+    final token = await getToken();
+    if (token == null) return null;
+    return JwtClaims.fromToken(token);
   }
 
   /// Check if user is authenticated.

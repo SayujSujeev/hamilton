@@ -49,17 +49,10 @@ class _UpcomingBookingDetailScreenState
       if (!mounted) return;
 
       final now = DateTime.now();
-      final mine = all.where((b) {
-        if (b.vehicleId.isNotEmpty && b.vehicleId == widget.vehicle.id) {
-          return true;
-        }
-        return false;
-      }).toList();
+      final mine = all.where((b) => _bookingMatchesVehicle(b, widget.vehicle)).toList();
 
-      final filtered = mine.isEmpty ? all : mine;
-
-      final upcoming = filtered
-          .where((b) => b.hasDate && b.isUpcoming(now))
+      final upcoming = mine
+          .where((b) => b.hasDate && b.isUpcoming(now) && !_isCancelled(b))
           .toList()
         ..sort((a, b) {
           final ad = a.bookingDate!;
@@ -80,6 +73,23 @@ class _UpcomingBookingDetailScreenState
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  bool _bookingMatchesVehicle(UserBooking booking, VehicleModel vehicle) {
+    if (booking.vehicleId.isNotEmpty && booking.vehicleId == vehicle.id) {
+      return true;
+    }
+    final bookingPlate = _normalizePlate(booking.licensePlate);
+    final vehiclePlate = _normalizePlate(vehicle.licensePlate);
+    return bookingPlate.isNotEmpty && bookingPlate == vehiclePlate;
+  }
+
+  String _normalizePlate(String plate) =>
+      plate.trim().replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+
+  bool _isCancelled(UserBooking booking) {
+    final s = booking.status.toLowerCase().trim();
+    return s == 'cancelled' || s == 'canceled';
   }
 
   Future<void> _onCancelBooking(UserBooking booking) async {

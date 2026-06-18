@@ -36,24 +36,47 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rawRoleId = json['role_id'] ?? json['roleId'];
+    final rawCreatedAt = json['created_at'] ?? json['createdAt'];
+    final rawUpdatedAt = json['updated_at'] ?? json['updatedAt'];
+
     return UserModel(
-      id: json['id'] as String,
-      username: json['username'] as String,
-      firstname: json['firstname'] as String,
-      lastname: json['lastname'] as String,
-      email: json['email'] as String,
-      gender: json['gender'] as String?,
-      imageUrl: json['image_url'] as String?,
-      roleId: json['role_id'] as int,
-      address: json['address'] as String?,
-      isActive: json['is_active'] as bool? ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-      dob: json['dob'] as String?,
-      mobileNo: json['mobile_no'] as String?,
-      whatsappNo: json['whatsapp_no'] as String?,
-      note: json['note'] as String?,
+      id: _asString(json['id']),
+      username: _asString(json['username']),
+      firstname: _asString(json['firstname']),
+      lastname: _asString(json['lastname']),
+      email: _asString(json['email']),
+      gender: _asNullableString(json['gender']),
+      imageUrl: _asNullableString(json['image_url'] ?? json['imageUrl']),
+      roleId: rawRoleId is int
+          ? rawRoleId
+          : (rawRoleId is num ? rawRoleId.toInt() : 0),
+      address: _asNullableString(json['address']),
+      isActive: json['is_active'] is bool
+          ? json['is_active'] as bool
+          : (json['isActive'] as bool?) ?? true,
+      createdAt: rawCreatedAt is String
+          ? (DateTime.tryParse(rawCreatedAt) ?? DateTime.now())
+          : DateTime.now(),
+      updatedAt: rawUpdatedAt is String
+          ? (DateTime.tryParse(rawUpdatedAt) ?? DateTime.now())
+          : DateTime.now(),
+      dob: _asNullableString(json['dob']),
+      mobileNo: _asNullableString(json['mobile_no'] ?? json['mobileNo']),
+      whatsappNo: _asNullableString(json['whatsapp_no'] ?? json['whatsappNo']),
+      note: _asNullableString(json['note']),
     );
+  }
+
+  static String _asString(dynamic value) {
+    if (value is String) return value;
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  static String? _asNullableString(dynamic value) {
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return null;
   }
 
   Map<String, dynamic> toJson() {

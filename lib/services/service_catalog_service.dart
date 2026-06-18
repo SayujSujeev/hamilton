@@ -9,7 +9,7 @@ class ServiceCatalogService {
   /// GET /api/v1/service — active workshop service types.
   Future<List<WorkshopService>> fetchServices() async {
     return _api.handleAuthErrors(() async {
-      final response = await _api.get('/api/v1/service');
+      final response = await _api.get('/service');
       final json = _api.parseJson(response);
       final raw = json['data'];
       if (raw is! List<dynamic>) return [];
@@ -17,7 +17,7 @@ class ServiceCatalogService {
       return raw
           .whereType<Map<String, dynamic>>()
           .map(WorkshopService.fromJson)
-          .where((s) => s.isActive)
+          .where((s) => s.id.isNotEmpty && s.isActive)
           .toList();
     });
   }

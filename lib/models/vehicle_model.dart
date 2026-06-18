@@ -77,32 +77,192 @@ class VehicleModel {
       : null;
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) {
-    final rawCreatedAt = json['created_at'];
-    final rawUpdatedAt = json['updated_at'];
-    final rawServiceDetails = json['service_details'];
+    final vehicleObj = json['vehicle'] is Map<String, dynamic>
+        ? json['vehicle'] as Map<String, dynamic>
+        : null;
+    final vehicleDetailObj = json['vehicle_detail'] is Map<String, dynamic>
+        ? json['vehicle_detail'] as Map<String, dynamic>
+        : null;
+    final brandObj = json['brand'] is Map<String, dynamic>
+        ? json['brand'] as Map<String, dynamic>
+        : (vehicleObj?['brand'] is Map<String, dynamic>
+            ? vehicleObj!['brand'] as Map<String, dynamic>
+            : null);
+
+    final rawCreatedAt = _pickFirst(json, vehicleObj, vehicleDetailObj, const [
+      'created_at',
+      'createdAt',
+    ]);
+    final rawUpdatedAt = _pickFirst(json, vehicleObj, vehicleDetailObj, const [
+      'updated_at',
+      'updatedAt',
+    ]);
+    final rawServiceDetails = json['service_details'] ?? json['serviceDetails'];
 
     return VehicleModel(
-      id: json['id'] as String,
-      name: (json['name'] ?? '') as String,
-      nickname: json['nickname'] as String?,
-      brandName: (json['brand_name'] ?? '') as String,
-      brandLogoUrl: json['brand_logo_url'] as String?,
-      imageUrl: json['image_url'] as String?,
+      id: _pickString(json, const ['id', 'user_vehicle_id', '_id']).ifEmptyTry(
+        () => vehicleDetailObj == null
+            ? ''
+            : _pickString(vehicleDetailObj, const ['id', 'user_vehicle_id', '_id']),
+      ),
+      name: _pickString(json, const ['name', 'vehicle_name', 'model']).ifEmptyTry(
+        () => vehicleObj == null
+            ? ''
+            : _pickString(vehicleObj, const ['name', 'vehicle_name', 'model']),
+      ),
+      nickname: _pickNullableString(json, const ['nickname']),
+      brandName: _pickString(json, const ['brand_name', 'brandName']).ifEmptyTry(() {
+        if (brandObj != null) {
+          final fromBrand = _pickString(
+            brandObj,
+            const ['name', 'brand_name', 'brandName'],
+          );
+          if (fromBrand.isNotEmpty) return fromBrand;
+        }
+        if (vehicleObj != null) {
+          final fromVehicle = _pickString(
+            vehicleObj,
+            const ['brand_name', 'brandName', 'brand'],
+          );
+          if (fromVehicle.isNotEmpty) return fromVehicle;
+        }
+        return '';
+      }),
+      brandLogoUrl: _pickNullableString(json, const [
+        'brand_logo_url',
+        'brandLogoUrl',
+      ]) ??
+          (brandObj == null
+              ? null
+              : _pickNullableString(brandObj, const [
+                  'logo_url',
+                  'brand_logo_url',
+                  'brandLogoUrl',
+                  'image_url',
+                ])),
+      imageUrl: _pickNullableString(json, const ['image_url', 'imageUrl']),
       note: json['note'],
-      licensePlate: (json['license_plate'] ?? '') as String,
-      manufacturedYear: (json['manufactured_year'] ?? '') as String,
-      odoReading: (json['odo_reading'] as num?)?.toInt() ?? 0,
-      mVehicleId: (json['m_vehicle_id'] ?? '') as String,
-      tUserId: (json['t_user_id'] ?? '') as String,
+      licensePlate: _pickString(json, const [
+        'license_plate',
+        'licensePlate',
+        'plate',
+      ]).ifEmptyTry(() {
+        if (vehicleDetailObj != null) {
+          final fromDetail = _pickString(
+            vehicleDetailObj,
+            const ['license_plate', 'licensePlate', 'plate'],
+          );
+          if (fromDetail.isNotEmpty) return fromDetail;
+        }
+        if (vehicleObj != null) {
+          return _pickString(
+            vehicleObj,
+            const ['license_plate', 'licensePlate', 'plate'],
+          );
+        }
+        return '';
+      }),
+      manufacturedYear: _pickYear(json, const [
+        'manufactured_year',
+        'manufacturedYear',
+        'year',
+      ]),
+      odoReading: _pickInt(json, const ['odo_reading', 'odoReading']) ??
+          (vehicleDetailObj == null
+              ? 0
+              : _pickInt(vehicleDetailObj, const ['odo_reading', 'odoReading']) ??
+                  0),
+      mVehicleId: _pickString(json, const [
+        'm_vehicle_id',
+        'vehicle_id',
+        'mVehicleId',
+        'vehicleId',
+      ]).ifEmptyTry(() => vehicleObj == null
+          ? ''
+          : _pickString(vehicleObj, const [
+              'm_vehicle_id',
+              'vehicle_id',
+              'id',
+            ])),
+      tUserId: _pickString(json, const [
+        't_user_id',
+        'user_id',
+        'tUserId',
+        'userId',
+      ]),
       serviceDetails: rawServiceDetails is Map<String, dynamic>
           ? ServiceDetails.fromJson(rawServiceDetails)
           : null,
-      createdBy: json['created_by'] as String?,
-      updatedBy: json['updated_by'] as String?,
+      createdBy: _pickNullableString(json, const ['created_by', 'createdBy']),
+      updatedBy: _pickNullableString(json, const ['updated_by', 'updatedBy']),
       createdAt: rawCreatedAt is String ? DateTime.tryParse(rawCreatedAt) : null,
       updatedAt: rawUpdatedAt is String ? DateTime.tryParse(rawUpdatedAt) : null,
-      isActive: json['is_active'] as bool? ?? true,
+      isActive: json['is_active'] is bool
+          ? json['is_active'] as bool
+          : (json['isActive'] as bool?) ?? true,
     );
+  }
+
+  static String _pickString(Map<String, dynamic> json, List<String> keys) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+      if (v is num) return v.toString();
+    }
+    return '';
+  }
+
+  static String? _pickNullableString(Map<String, dynamic> json, List<String> keys) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+    }
+    return null;
+  }
+
+  static dynamic _pickFirst(
+    Map<String, dynamic> json,
+    Map<String, dynamic>? vehicleObj,
+    Map<String, dynamic>? vehicleDetailObj,
+    List<String> keys,
+  ) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v != null) return v;
+    }
+    if (vehicleObj != null) {
+      for (final k in keys) {
+        final v = vehicleObj[k];
+        if (v != null) return v;
+      }
+    }
+    if (vehicleDetailObj != null) {
+      for (final k in keys) {
+        final v = vehicleDetailObj[k];
+        if (v != null) return v;
+      }
+    }
+    return null;
+  }
+
+  static String _pickYear(Map<String, dynamic> json, List<String> keys) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+      if (v is int) return v.toString();
+      if (v is num) return v.toInt().toString();
+    }
+    return '';
+  }
+
+  static int? _pickInt(Map<String, dynamic> json, List<String> keys) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v.trim());
+    }
+    return null;
   }
 
   Map<String, dynamic> toJson() => {
@@ -125,4 +285,9 @@ class VehicleModel {
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
         'is_active': isActive,
       };
+}
+
+extension _IfEmptyTry on String {
+  String ifEmptyTry(String Function() fallback) =>
+      isEmpty ? fallback() : this;
 }

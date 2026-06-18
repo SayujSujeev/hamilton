@@ -2,8 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:hamilton_car_service/screens/splash_screen.dart';
 
-// import 'screens/continue_with_google_screen.dart';
-import 'screens/phone_registration_screen.dart';
+import 'screens/splash_screen.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -38,9 +37,7 @@ class HamiltonCarServiceApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-    //  home: const ContinueWithGoogleScreen(),
-  //  home: SplashScreen(nextScreen: ContinueWithGoogleScreen()),
-      home: SplashScreen(nextScreen: PhoneRegistrationScreen()),
+      home: const SplashScreen(),
     );
   }
 }

@@ -1,16 +1,25 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 import '../models/user_model.dart';
 import '../models/vehicle_model.dart';
 
 class ApiClient {
-  static const String baseUrl = 'https://hamilton-be-dev.vercel.app';
+  static const String baseUrl = 'https://hamilton-be-dev.onrender.com/api/v1';
   final AuthService _authService = AuthService();
 
   /// Get headers with authentication token
   Future<Map<String, String>> _getHeaders() async {
     final token = await _authService.getToken();
+    if (kDebugMode) {
+      if (token == null) {
+        debugPrint('[ApiClient] No token in storage — request will be UNauthenticated');
+      } else {
+        final preview = token.length > 16 ? '${token.substring(0, 16)}…' : token;
+        debugPrint('[ApiClient] Attaching token (len=${token.length}): $preview');
+      }
+    }
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -119,8 +128,8 @@ class ApiClient {
   /// Calls native auth endpoint and returns backend JWT.
   Future<String?> authenticateWithGoogleToken(String idToken) async {
     final endpoints = <String>[
-      '/api/v1/auth/google/app',
-      '/api/v1/auth/google/android',
+      '/auth/google/app',
+      '/auth/google/android',
     ];
 
     String? lastError;
@@ -170,15 +179,15 @@ class ApiClient {
   /// Authenticate with a Firebase Phone Auth id_token.
   /// Calls the backend phone-auth endpoint and returns the backend JWT.
   Future<String> authenticateWithPhoneToken(String firebaseIdToken) async {
-    final uri = Uri.parse('$baseUrl/api/v1/auth/phone');
+    final uri = Uri.parse('$baseUrl/auth/phone-login');
     try {
       final response = await http.post(
         uri,
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': 'Bearer $firebaseIdToken',
         },
-        body: json.encode({'id_token': firebaseIdToken}),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -197,29 +206,47 @@ class ApiClient {
         }
 
         throw Exception(
-          'Phone auth succeeded but access_token missing: ${response.body}',
+          'Auth succeeded but access_token missing: ${response.body}',
         );
       }
 
-      throw Exception(
-        'Phone auth failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_formatAuthFailure(response));
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Phone authentication error: $e');
+    }
+  }
+
+  String _formatAuthFailure(http.Response response) {
+    try {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final serverError = data['error']?.toString();
+      if (response.statusCode >= 500) {
+        return 'Server error during login (${response.statusCode}). '
+            'The backend team needs to fix phone-login. '
+            '${serverError ?? response.body}';
+      }
+      return 'Phone auth failed (${response.statusCode}): '
+          '${serverError ?? response.body}';
+    } catch (_) {
+      return 'Phone auth failed (${response.statusCode}): ${response.body}';
     }
   }
 
   /// GET /api/v1/user — returns the full user object under response['data'].
   Future<Map<String, dynamic>> getCurrentUser() async {
-    final response = await get('/api/v1/user');
+    final response = await get('/user');
     return parseJson(response);
   }
 
   /// GET /api/v1/user — returns the UserModel object.
   Future<UserModel> getCurrentUserModel() async {
-    final response = await get('/api/v1/user');
+    final response = await get('/user');
     final json = parseJson(response);
-    final userData = json['data'] as Map<String, dynamic>;
+    final userData = json['data'];
+    if (userData is! Map<String, dynamic>) {
+      throw Exception('User profile missing in response: ${response.body}');
+    }
     return UserModel.fromJson(userData);
   }
 
@@ -227,38 +254,63 @@ class ApiClient {
   /// Accepted fields: firstname, lastname, gender, dob, image_url,
   ///                  mobile_no, whatsapp_no, role_id, note, address
   Future<Map<String, dynamic>> updateCurrentUser(Map<String, dynamic> data) async {
-    final response = await patch('/api/v1/user', body: data);
+    final response = await patch('/user', body: data);
     return parseJson(response);
   }
 
   /// PATCH /api/v1/user — updates profile fields using UserModel.
   Future<UserModel> updateCurrentUserModel(Map<String, dynamic> data) async {
-    final response = await patch('/api/v1/user', body: data);
+    final response = await patch('/user', body: data);
     final json = parseJson(response);
-    final userData = json['data'] as Map<String, dynamic>;
+    final userData = json['data'];
+    if (userData is! Map<String, dynamic>) {
+      throw Exception('User profile missing in response: ${response.body}');
+    }
     return UserModel.fromJson(userData);
   }
 
   /// GET /api/v1/user/vehicle — returns the list of vehicles for the current user.
   Future<List<VehicleModel>> getUserVehicles() async {
-    final response = await get('/api/v1/user/vehicle');
+    final response = await get('/user/vehicle');
     final json = parseJson(response);
-    final vehiclesData = json['data'] as List<dynamic>;
+    if (kDebugMode) {
+      debugPrint('[ApiClient] /user/vehicle raw data: ${json['data']}');
+    }
+
+    final raw = json['data'];
+    List<dynamic> vehiclesData = const [];
+    if (raw is List) {
+      vehiclesData = raw;
+    } else if (raw is Map<String, dynamic>) {
+      for (final key in const ['vehicles', 'vehicle', 'data', 'items']) {
+        final value = raw[key];
+        if (value is List) {
+          vehiclesData = value;
+          break;
+        }
+      }
+    }
+
     return vehiclesData
-        .map((vehicleJson) => VehicleModel.fromJson(vehicleJson as Map<String, dynamic>))
+        .whereType<Map<String, dynamic>>()
+        .map(VehicleModel.fromJson)
         .toList();
   }
 
   /// GET /api/v1/user/vehicle/{id} — returns a single vehicle's full detail.
   Future<VehicleModel> getUserVehicleById(String userVehicleId) async {
-    final response = await get('/api/v1/user/vehicle/$userVehicleId');
+    final response = await get('/user/vehicle/$userVehicleId');
     final json = parseJson(response);
-    return VehicleModel.fromJson(json['data'] as Map<String, dynamic>);
+    final data = json['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Vehicle missing in response: ${response.body}');
+    }
+    return VehicleModel.fromJson(data);
   }
 
   /// GET /api/v1/user/slots — returns available service slots for the current user.
   Future<Map<String, dynamic>> getUserSlots() async {
-    final response = await get('/api/v1/user/slots');
+    final response = await get('/user/slots');
     return parseJson(response);
   }
 
@@ -286,7 +338,7 @@ class ApiClient {
   /// }
   /// ```
   Future<Map<String, dynamic>> getUserBookings() async {
-    final response = await get('/api/v1/user/booking');
+    final response = await get('/user/booking');
     return parseJson(response);
   }
 
@@ -295,15 +347,22 @@ class ApiClient {
     int offset = 0,
     int limit = 50,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/brand').replace(
+    final uri = Uri.parse('$baseUrl/brand').replace(
       queryParameters: {
         'offset': offset.toString(),
         'limit': limit.toString(),
       },
     );
     final headers = await _getHeaders();
+    if (kDebugMode) {
+      debugPrint('[ApiClient] GET $uri');
+      debugPrint('[ApiClient] hasAuthHeader=${headers.containsKey('Authorization')}');
+    }
     try {
       final response = await http.get(uri, headers: headers);
+      if (kDebugMode) {
+        debugPrint('[ApiClient] /brand -> ${response.statusCode}: ${response.body}');
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('API error: ${response.statusCode} - ${response.body}');
       }
@@ -317,9 +376,18 @@ class ApiClient {
 
   /// GET /api/v1/brand/detail/{id} — returns details for a single brand.
   Future<Map<String, dynamic>> getBrandById(String id) async {
-    final response = await get('/api/v1/brand/detail/$id');
-    final data = parseJson(response);
-    return data['data'] as Map<String, dynamic>;
+    final uri = Uri.parse('$baseUrl/brand/detail/$id');
+    final headers = await _getHeaders();
+    try {
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('API error: ${response.statusCode} - ${response.body}');
+      }
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
   }
 
   /// GET /api/v1/brand/search — searches brands by name.
@@ -328,14 +396,14 @@ class ApiClient {
     String name, {
     String? type,
   }) async {
-    final headers = await _getHeaders();
     final queryParams = <String, String>{'name': name};
     if (type != null) {
       queryParams['type'] = type;
     }
-    final uri = Uri.parse('$baseUrl/api/v1/brand/search').replace(
+    final uri = Uri.parse('$baseUrl/brand/search').replace(
       queryParameters: queryParams,
     );
+    final headers = await _getHeaders();
     try {
       final response = await http.get(uri, headers: headers);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -349,13 +417,21 @@ class ApiClient {
     }
   }
 
-  /// GET /api/v1/vehicle/list — returns vehicles for a given brand (no auth required).
+  /// GET /api/v1/vehicle/list — returns vehicles for a given brand.
   Future<List<Map<String, dynamic>>> getVehiclesByBrandId(String brandId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/vehicle/list').replace(
+    final uri = Uri.parse('$baseUrl/vehicle/list').replace(
       queryParameters: {'brandId': brandId},
     );
+    final headers = await _getHeaders();
+    if (kDebugMode) {
+      debugPrint('[ApiClient] GET $uri');
+      debugPrint('[ApiClient] hasAuthHeader=${headers.containsKey('Authorization')}');
+    }
     try {
-      final response = await http.get(uri, headers: const {'Accept': 'application/json'});
+      final response = await http.get(uri, headers: headers);
+      if (kDebugMode) {
+        debugPrint('[ApiClient] /vehicle/list -> ${response.statusCode}: ${response.body}');
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('API error: ${response.statusCode} - ${response.body}');
       }
@@ -373,7 +449,7 @@ class ApiClient {
     required String name,
   }) async {
     final headers = await _getHeaders();
-    final uri = Uri.parse('$baseUrl/api/v1/vehicle/search').replace(
+    final uri = Uri.parse('$baseUrl/vehicle/search').replace(
       queryParameters: {'brandId': brandId, 'name': name},
     );
     try {
@@ -406,7 +482,7 @@ class ApiClient {
       if (note != null && note.isNotEmpty) 'note': note,
       if (manufacturedYear != null) 'manufactured_year': manufacturedYear,
     };
-    final response = await post('/api/v1/user/vehicle', body: body);
+    final response = await post('/user/vehicle', body: body);
     return parseJson(response);
   }
 
@@ -428,7 +504,7 @@ class ApiClient {
       if (note != null) 'note': note,
       if (manufacturedYear != null) 'manufactured_year': manufacturedYear,
     };
-    final response = await patch('/api/v1/user/vehicle/$userVehicleId', body: body);
+    final response = await patch('/user/vehicle/$userVehicleId', body: body);
     return parseJson(response);
   }
 

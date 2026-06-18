@@ -8,10 +8,19 @@ class ServiceAvailabilityRow {
 
   factory ServiceAvailabilityRow.fromJson(Map<String, dynamic> json) {
     return ServiceAvailabilityRow(
-      serviceName: (json['service_name'] ?? '') as String,
-      serviceId: (json['service_id'] ?? '') as String,
-      totalCapacity: (json['total_capacity'] as num?)?.toInt() ?? 0,
-      availableSlot: (json['available_slot'] as num?)?.toInt() ?? 0,
+      serviceName: _pickString(json, const [
+        'service_name',
+        'serviceName',
+        'name',
+      ]),
+      serviceId: _pickString(json, const [
+        'service_id',
+        'serviceId',
+        'id',
+      ]),
+      totalCapacity: _pickInt(json, const ['total_capacity', 'totalCapacity']) ?? 0,
+      availableSlot:
+          _pickInt(json, const ['available_slot', 'availableSlot']) ?? 0,
     );
   }
 
@@ -32,7 +41,7 @@ class WorkshopSlot {
   });
 
   factory WorkshopSlot.fromJson(Map<String, dynamic> json) {
-    final rawList = json['service_availability'];
+    final rawList = json['service_availability'] ?? json['serviceAvailability'];
     final list = rawList is List
         ? rawList
             .whereType<Map<String, dynamic>>()
@@ -41,8 +50,8 @@ class WorkshopSlot {
         : <ServiceAvailabilityRow>[];
 
     return WorkshopSlot(
-      slotTiming: (json['slot_timing'] ?? '') as String,
-      slotId: (json['slot_id'] ?? '') as String,
+      slotTiming: _pickString(json, const ['slot_timing', 'slotTiming', 'time']),
+      slotId: _pickString(json, const ['slot_id', 'slotId', 'id']),
       serviceAvailability: list,
     );
   }
@@ -57,4 +66,23 @@ class WorkshopSlot {
     }
     return false;
   }
+}
+
+String _pickString(Map<String, dynamic> json, List<String> keys) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    if (v is num) return v.toString();
+  }
+  return '';
+}
+
+int? _pickInt(Map<String, dynamic> json, List<String> keys) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim());
+  }
+  return null;
 }

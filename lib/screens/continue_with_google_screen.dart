@@ -4,8 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../widgets/get_started_primary_button.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
-import 'personal_details_screen.dart';
-import 'home_screen_wrapper.dart';
+import '../utils/auth_navigation.dart';
 
 /// Registration entry screen — uses native Google Sign-In SDK.
 class ContinueWithGoogleScreen extends StatefulWidget {
@@ -46,32 +45,10 @@ class _ContinueWithGoogleScreenState extends State<ContinueWithGoogleScreen> {
       // 3. Persist the JWT.
       await _authService.saveToken(jwtToken);
 
-      // 4. Decide where to navigate based on profile completeness.
+      // 4. Route using JWT claims (is_profile_completed, is_vehicle_added).
       if (!mounted) return;
-
-      try {
-        final userResponse = await _apiClient.getCurrentUser();
-        final userData = userResponse['data'];
-        final bool isProfileComplete = userData != null &&
-            userData['firstname'] != null &&
-            userData['lastname'] != null &&
-            userData['email'] != null;
-
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-
-        _navigateTo(
-          isProfileComplete
-              ? const HomeScreenWrapper()
-              : const PersonalDetailsScreen(),
-        );
-      } catch (_) {
-        // If the profile check fails treat the user as new.
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _navigateTo(const PersonalDetailsScreen());
-        }
-      }
+      setState(() => _isLoading = false);
+      _navigateTo(authDestinationForToken(jwtToken));
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);

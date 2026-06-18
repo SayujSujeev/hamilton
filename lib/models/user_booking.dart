@@ -82,23 +82,25 @@ class UserBooking {
         () => slotObj == null ? '' : _pickString(slotObj, const ['id', 'slot_id']));
 
     final vehicleRaw = json['vehicle'];
-    final vehicleObj = vehicleRaw is Map<String, dynamic> ? vehicleRaw : null;
+    final vehicleObj =
+        vehicleRaw is Map<String, dynamic> ? vehicleRaw : null;
 
-    final vehicleDetailRaw = json['vehicle_detail'];
+    final vehicleDetailRaw = json['vehicle_detail'] ?? json['vehicleDetail'];
     final vehicleDetailObj =
         vehicleDetailRaw is Map<String, dynamic> ? vehicleDetailRaw : null;
 
-    final vehicleId =
-        _pickString(json, const ['vehicle_id', 'vehicleId']).ifEmptyTry(() {
-      if (vehicleObj != null) {
-        final v = _pickString(vehicleObj, const ['id', '_id']);
-        if (v.isNotEmpty) return v;
-      }
-      if (vehicleDetailObj != null) {
-        return _pickString(vehicleDetailObj, const ['id', '_id']);
-      }
-      return '';
-    });
+    final vehicleId = vehicleRaw is String && vehicleRaw.trim().isNotEmpty
+        ? vehicleRaw.trim()
+        : _pickString(json, const ['vehicle_id', 'vehicleId']).ifEmptyTry(() {
+            if (vehicleObj != null) {
+              final v = _pickString(vehicleObj, const ['id', '_id']);
+              if (v.isNotEmpty) return v;
+            }
+            if (vehicleDetailObj != null) {
+              return _pickString(vehicleDetailObj, const ['id', '_id']);
+            }
+            return '';
+          });
 
     final vehicleName = vehicleObj != null
         ? _pickString(vehicleObj, const ['name', 'model', 'nickname'])

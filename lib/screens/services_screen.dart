@@ -483,26 +483,38 @@ class _ServicesHeader extends StatelessWidget {
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 20, 12, 0),
+              padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Services',
-                    style: GoogleFonts.dmSerifText(
-                      color: Colors.white,
-                      fontSize: 32,
-                      height: 1.0,
-                      fontWeight: FontWeight.w400,
-                    ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Select one or more services to book together.',
-                    style: GoogleFonts.dmSans(
-                      color: Colors.white.withValues(alpha: 0.78),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Services',
+                          style: GoogleFonts.dmSerifText(
+                            color: Colors.white,
+                            fontSize: 32,
+                            height: 1.0,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Select one or more services to book together.',
+                          style: GoogleFonts.dmSans(
+                            color: Colors.white.withValues(alpha: 0.78),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

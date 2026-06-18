@@ -18,6 +18,9 @@ class UpcomingBookingCard extends StatelessWidget {
   final VoidCallback? onCancel;
   final bool compact;
 
+  static const _accent = Color(0xFFB71C1C);
+  static const _burgundy = Color(0xFF43001E);
+
   bool get _canCancel {
     if (onCancel == null || booking.id.isEmpty) return false;
     final status = booking.status.toLowerCase().trim();
@@ -74,203 +77,298 @@ class UpcomingBookingCard extends StatelessWidget {
     return '$head  •  $plate';
   }
 
+  Color _statusBackground(String status) {
+    final s = status.toLowerCase().trim();
+    if (s.contains('cancel')) return const Color(0xFFF5F5F5);
+    if (s.contains('complete') || s.contains('done')) {
+      return const Color(0xFFE8F5E9);
+    }
+    return const Color(0xFFFFEFEF);
+  }
+
+  Color _statusForeground(String status) {
+    final s = status.toLowerCase().trim();
+    if (s.contains('cancel')) return const Color(0xFF757575);
+    if (s.contains('complete') || s.contains('done')) {
+      return const Color(0xFF1B5E20);
+    }
+    return _accent;
+  }
+
   @override
   Widget build(BuildContext context) {
     final services = booking.serviceNames;
+    final radius = compact ? 12.0 : 16.0;
 
     return Container(
-      padding: EdgeInsets.all(compact ? 14 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8E8E8)),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: const Color(0xFFE7E7E7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: compact ? 36 : 40,
-                height: compact ? 36 : 40,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEFEF),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.event_available_outlined,
-                  color: const Color(0xFFB71C1C),
-                  size: compact ? 18 : 20,
-                ),
+          Container(
+            height: 4,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_burgundy, _accent],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(compact ? 14 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      _formattedDate(),
-                      style: GoogleFonts.dmSans(
-                        fontSize: compact ? 13 : 14,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1B1B1B),
+                    Container(
+                      width: compact ? 36 : 44,
+                      height: compact ? 36 : 44,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF43001E), Color(0xFFB71C1C)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.event_available_outlined,
+                        color: Colors.white,
+                        size: compact ? 18 : 22,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _formattedTime(),
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF666666),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            compact ? _formattedDate() : _formattedDate(),
+                            style: compact
+                                ? GoogleFonts.dmSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF1B1B1B),
+                                  )
+                                : GoogleFonts.dmSerifText(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w400,
+                                    color: const Color(0xFF1B1B1B),
+                                    height: 1.1,
+                                  ),
+                          ),
+                          const SizedBox(height: 6),
+                          _TimeChip(label: _formattedTime()),
+                        ],
                       ),
                     ),
+                    if (booking.status.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _statusBackground(booking.status),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Text(
+                          booking.status,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _statusForeground(booking.status),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ),
-              if (booking.status.isNotEmpty)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Text(
-                    booking.status,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1B5E20),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (compact) ...[
-            const SizedBox(height: 10),
-            Text(
-              _serviceLabel(),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF333333),
-              ),
-            ),
-          ],
-          if (!compact && services.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final service in services)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4F4F4),
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: const Color(0xFFE0E0E0)),
-                    ),
-                    child: Text(
-                      service,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF333333),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-          if (!compact && booking.description.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              booking.description,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: const Color(0xFF777777),
-                height: 1.4,
-              ),
-            ),
-          ],
-          if (!compact &&
-              (booking.licensePlate.isNotEmpty ||
-                  booking.vehicleName.isNotEmpty ||
-                  booking.vehicleBrand.isNotEmpty)) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(
-                  Icons.directions_car_outlined,
-                  size: 14,
-                  color: Color(0xFF888888),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    _vehicleLine(),
-                    maxLines: 1,
+                if (compact) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _serviceLabel(),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: const Color(0xFF888888),
-                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF333333),
                     ),
                   ),
-                ),
+                ],
+                if (!compact) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    _serviceLabel(),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF222222),
+                    ),
+                  ),
+                ],
+                if (!compact && services.length > 1) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final service in services)
+                        _MetaChip(label: service),
+                    ],
+                  ),
+                ],
+                if (!compact &&
+                    (booking.licensePlate.isNotEmpty ||
+                        booking.vehicleName.isNotEmpty ||
+                        booking.vehicleBrand.isNotEmpty)) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_car_outlined,
+                        size: 14,
+                        color: Color(0xFF888888),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _vehicleLine(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: const Color(0xFF888888),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_canCancel) ...[
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, color: Color(0xFFEFEFEF)),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: isCancelling ? null : onCancel,
+                      icon: isCancelling
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _accent,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: _accent,
+                            ),
+                      label: Text(
+                        isCancelling ? 'Cancelling…' : 'Cancel booking',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _accent,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ],
-          if (_canCancel) ...[
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFEFEFEF)),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: isCancelling ? null : onCancel,
-                icon: isCancelling
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFFB71C1C),
-                        ),
-                      )
-                    : const Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: Color(0xFFB71C1C),
-                      ),
-                label: Text(
-                  isCancelling ? 'Cancelling…' : 'Cancel booking',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFB71C1C),
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ),
-          ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _TimeChip extends StatelessWidget {
+  const _TimeChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F5),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: const Color(0xFFFFD6D6)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.schedule,
+            size: 12,
+            color: Color(0xFFB71C1C),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFB71C1C),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4F4),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF333333),
+        ),
       ),
     );
   }

@@ -125,6 +125,37 @@ class ApiClient {
     return json.decode(response.body) as Map<String, dynamic>;
   }
 
+  /// Pulls a list of JSON objects from common API `data` shapes.
+  static List<Map<String, dynamic>> extractApiListRows(dynamic raw) {
+    if (raw is List) {
+      return raw.whereType<Map<String, dynamic>>().toList();
+    }
+    if (raw is Map<String, dynamic>) {
+      for (final key in const [
+        'bookings',
+        'booking',
+        'slots',
+        'data',
+        'items',
+        'rows',
+        'results',
+        'user_booking',
+        'user_bookings',
+      ]) {
+        final value = raw[key];
+        if (value is List) {
+          final rows = value.whereType<Map<String, dynamic>>().toList();
+          if (rows.isNotEmpty) return rows;
+        }
+        if (value is Map<String, dynamic>) {
+          final nested = extractApiListRows(value);
+          if (nested.isNotEmpty) return nested;
+        }
+      }
+    }
+    return const [];
+  }
+
   /// Authenticate with a Google id_token obtained from the native SDK.
   /// Calls native auth endpoint and returns backend JWT.
   Future<String?> authenticateWithGoogleToken(String idToken) async {

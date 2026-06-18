@@ -85,32 +85,43 @@ class SlotService {
 
   Future<List<UserBooking>> fetchUserBookings() async {
     return _api.handleAuthErrors(() async {
-      final response = await _api.get('/user/booking');
-      final map = _api.parseJson(response);
-
-      final raw = map['data'];
-      List<dynamic> rows = const [];
-      if (raw is List) {
-        rows = raw;
-      } else if (raw is Map<String, dynamic>) {
-        for (final key in const ['bookings', 'slots', 'data', 'items']) {
-          final v = raw[key];
-          if (v is List) {
-            rows = v;
-            break;
-          }
-        }
-      }
+      final fromBooking = await _fetchBookingsFromEndpoint('/user/booking');
+      if (fromBooking.isNotEmpty) return fromBooking;
 
       if (kDebugMode) {
-        debugPrint('[SlotService] /user/booking -> ${rows.length} rows');
+        debugPrint('[SlotService] /user/booking empty — trying /user/slots');
       }
-
-      return rows
-          .whereType<Map<String, dynamic>>()
-          .map(UserBooking.fromJson)
-          .toList();
+      return _fetchBookingsFromEndpoint('/user/slots');
     });
+  }
+
+  Future<List<UserBooking>> _fetchBookingsFromEndpoint(String endpoint) async {
+    final response = await _api.get(endpoint);
+    final map = _api.parseJson(response);
+    final rows = ApiClient.extractApiListRows(map['data']);
+
+    if (kDebugMode) {
+      debugPrint('[SlotService] $endpoint -> ${rows.length} rows');
+      if (rows.isNotEmpty) {
+        final first = rows.first;
+        debugPrint('[SlotService] first row keys: ${first.keys.toList()}');
+        debugPrint(
+          '[SlotService] booking_date raw: ${first['booking_date']} '
+          '(${first['booking_date'].runtimeType})',
+        );
+        final slotRaw = first['slot'];
+        if (slotRaw is Map) {
+          debugPrint('[SlotService] slot keys: ${(slotRaw).keys.toList()}');
+          debugPrint('[SlotService] slot raw: $slotRaw');
+        }
+        final vd = first['vehicle_detail'];
+        if (vd is Map) {
+          debugPrint('[SlotService] vehicle_detail keys: ${(vd).keys.toList()}');
+        }
+      }
+    }
+
+    return rows.map(UserBooking.fromJson).toList();
   }
 
   static String? _extractBookingId(dynamic raw) {

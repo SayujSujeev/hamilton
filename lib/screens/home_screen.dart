@@ -3,11 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/user_booking.dart';
 import '../models/vehicle_model.dart';
 import '../services/auth_service.dart';
+import '../services/slot_service.dart';
 import '../utils/brand_display_name.dart';
+import '../utils/upcoming_booking_filters.dart';
 import '../widgets/brand_logo_badge.dart';
 import '../widgets/get_started_primary_button.dart';
+import '../widgets/upcoming_booking_card.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
 import 'profile_screen.dart';
@@ -112,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _heroImageHeight = 408.0;
 
   /// Must match the laid-out height of [_HeroDetailsSection].
-  static const double _heroDetailsHeight = 156.0;
+  static const double _heroDetailsHeight = 220.0;
 
   /// Gap between the white stats block and the action buttons.
   static const double _gapBelowHeroDetails = 14.0;
@@ -657,7 +661,7 @@ class _HeroDetailsSection extends StatelessWidget {
           const SizedBox(height: 12),
           _ViewDetailsButton(vehicle: vehicle),
           const SizedBox(height: 8),
-          _UpcomingBookingDetailButton(
+          _UpcomingBookingSection(
             vehicle: vehicle,
             vehicles: allVehicles,
           ),
@@ -1217,6 +1221,139 @@ class _ViewDetailsButton extends StatelessWidget {
             const Icon(Icons.chevron_right, size: 16, color: Color(0xFF555555)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _UpcomingBookingSection extends StatefulWidget {
+  const _UpcomingBookingSection({
+    required this.vehicle,
+    required this.vehicles,
+  });
+
+  final VehicleModel vehicle;
+  final List<VehicleModel> vehicles;
+
+  @override
+  State<_UpcomingBookingSection> createState() => _UpcomingBookingSectionState();
+}
+
+class _UpcomingBookingSectionState extends State<_UpcomingBookingSection> {
+  final SlotService _slotService = SlotService();
+
+  bool _loading = true;
+  List<UserBooking> _bookings = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  @override
+  void didUpdateWidget(_UpcomingBookingSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.vehicle.id != widget.vehicle.id) {
+      _loadBookings();
+    }
+  }
+
+  Future<void> _loadBookings() async {
+    setState(() => _loading = true);
+    try {
+      final all = await _slotService.fetchUserBookings();
+      if (!mounted) return;
+      setState(() {
+        _bookings = upcomingBookingsForVehicle(
+          all: all,
+          vehicle: widget.vehicle,
+          vehicles: widget.vehicles,
+        );
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _bookings = const [];
+        _loading = false;
+      });
+    }
+  }
+
+  void _openDetails() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UpcomingBookingDetailScreen(
+          vehicle: widget.vehicle,
+          vehicles: widget.vehicles,
+        ),
+      ),
+    ).then((_) => _loadBookings());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+        width: 358,
+        height: 40,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFFB71C1C),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_bookings.isEmpty) {
+      return _UpcomingBookingDetailButton(
+        vehicle: widget.vehicle,
+        vehicles: widget.vehicles,
+      );
+    }
+
+    return SizedBox(
+      width: 358,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: _openDetails,
+            borderRadius: BorderRadius.circular(14),
+            child: UpcomingBookingCard(
+              booking: _bookings.first,
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _openDetails,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                _bookings.length == 1
+                    ? 'View booking details'
+                    : 'View all ${_bookings.length} bookings',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF222222),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

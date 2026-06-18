@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_booking.dart';
 import '../models/vehicle_model.dart';
 import '../services/slot_service.dart';
 import '../utils/brand_display_name.dart';
+import '../utils/upcoming_booking_filters.dart';
+import '../widgets/upcoming_booking_card.dart';
 import 'services_screen.dart';
 
 /// Shows upcoming workshop bookings for [vehicle], pulled from
@@ -13,10 +16,12 @@ class UpcomingBookingDetailScreen extends StatefulWidget {
     super.key,
     required this.vehicle,
     required this.vehicles,
+    this.bookingConfirmedMessage,
   });
 
   final VehicleModel vehicle;
   final List<VehicleModel> vehicles;
+  final String? bookingConfirmedMessage;
 
   @override
   State<UpcomingBookingDetailScreen> createState() =>
@@ -30,12 +35,22 @@ class _UpcomingBookingDetailScreenState
   bool _loading = true;
   String? _error;
   List<UserBooking> _bookings = const [];
+  bool _showingAllVehicles = false;
   final Set<String> _cancellingIds = <String>{};
 
   @override
   void initState() {
     super.initState();
     _loadBookings();
+    final message = widget.bookingConfirmedMessage?.trim();
+    if (message != null && message.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      });
+    }
   }
 
   Future<void> _loadBookings() async {
@@ -48,22 +63,28 @@ class _UpcomingBookingDetailScreenState
       final all = await _slotService.fetchUserBookings();
       if (!mounted) return;
 
-      final now = DateTime.now();
-      final mine = all.where((b) => _bookingMatchesVehicle(b, widget.vehicle)).toList();
+      final mine = upcomingBookingsForVehicle(
+        all: all,
+        vehicle: widget.vehicle,
+        vehicles: widget.vehicles,
+      );
 
-      final upcoming = mine
-          .where((b) => b.hasDate && b.isUpcoming(now) && !_isCancelled(b))
-          .toList()
-        ..sort((a, b) {
-          final ad = a.bookingDate!;
-          final bd = b.bookingDate!;
-          final byDay = ad.compareTo(bd);
-          if (byDay != 0) return byDay;
-          return a.slotTiming.compareTo(b.slotTiming);
-        });
+      if (kDebugMode) {
+        final first = mine.isEmpty ? null : mine.first;
+        debugPrint(
+          '[UpcomingBooking] fetched=${all.length} shown=${mine.length} '
+          'vehicle=${widget.vehicle.id} plate=${widget.vehicle.licensePlate} '
+          'date=${first?.bookingDate} time=${first?.slotTiming} '
+          'services=${first?.serviceNames}',
+        );
+      }
 
       setState(() {
-        _bookings = upcoming;
+        _bookings = mine;
+        _showingAllVehicles = mine.isNotEmpty &&
+            mine.every(
+              (b) => !bookingMatchesVehicle(b, widget.vehicle),
+            );
         _loading = false;
       });
     } catch (e) {
@@ -73,23 +94,6 @@ class _UpcomingBookingDetailScreenState
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
-  }
-
-  bool _bookingMatchesVehicle(UserBooking booking, VehicleModel vehicle) {
-    if (booking.vehicleId.isNotEmpty && booking.vehicleId == vehicle.id) {
-      return true;
-    }
-    final bookingPlate = _normalizePlate(booking.licensePlate);
-    final vehiclePlate = _normalizePlate(vehicle.licensePlate);
-    return bookingPlate.isNotEmpty && bookingPlate == vehiclePlate;
-  }
-
-  String _normalizePlate(String plate) =>
-      plate.trim().replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
-
-  bool _isCancelled(UserBooking booking) {
-    final s = booking.status.toLowerCase().trim();
-    return s == 'cancelled' || s == 'canceled';
   }
 
   Future<void> _onCancelBooking(UserBooking booking) async {
@@ -210,7 +214,9 @@ class _UpcomingBookingDetailScreenState
             ),
             const SizedBox(height: 8),
             Text(
-              'Workshop appointments for this car.',
+              _showingAllVehicles
+                  ? 'All upcoming workshop appointments on your account.'
+                  : 'Workshop appointments for this car.',
               style: GoogleFonts.dmSans(
                 fontSize: 14,
                 color: const Color(0xFF6B6B6B),
@@ -218,7 +224,26 @@ class _UpcomingBookingDetailScreenState
               ),
             ),
             const SizedBox(height: 24),
-            _buildBody(),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 64),
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFB71C1C)),
+                ),
+              )
+            else if (_error != null)
+              _ErrorBlock(message: _error!, onRetry: _loadBookings)
+            else if (_bookings.isEmpty)
+              const _EmptyBlock()
+            else
+              for (var i = 0; i < _bookings.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                UpcomingBookingCard(
+                  booking: _bookings[i],
+                  isCancelling: _cancellingIds.contains(_bookings[i].id),
+                  onCancel: () => _onCancelBooking(_bookings[i]),
+                ),
+              ],
             const SizedBox(height: 32),
             _BookServiceButton(
               vehicle: widget.vehicle,
@@ -228,276 +253,6 @@ class _UpcomingBookingDetailScreenState
         ),
       ),
     );
-  }
-
-  Widget _buildBody() {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 64),
-        child: Center(
-          child: CircularProgressIndicator(color: Color(0xFFB71C1C)),
-        ),
-      );
-    }
-    if (_error != null) {
-      return _ErrorBlock(message: _error!, onRetry: _loadBookings);
-    }
-    if (_bookings.isEmpty) {
-      return const _EmptyBlock();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < _bookings.length; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
-          _BookingCard(
-            booking: _bookings[i],
-            isCancelling: _cancellingIds.contains(_bookings[i].id),
-            onCancel: () => _onCancelBooking(_bookings[i]),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _BookingCard extends StatelessWidget {
-  const _BookingCard({
-    required this.booking,
-    required this.isCancelling,
-    required this.onCancel,
-  });
-
-  final UserBooking booking;
-  final bool isCancelling;
-  final VoidCallback onCancel;
-
-  bool get _canCancel {
-    if (booking.id.isEmpty) return false;
-    final s = booking.status.toLowerCase().trim();
-    return s != 'cancelled' && s != 'canceled' && s != 'completed' && s != 'done';
-  }
-
-  static const _months = <String>[
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
-  String _formattedDate() {
-    final d = booking.bookingDate;
-    if (d == null) return '—';
-    return '${d.day} ${_months[d.month - 1]} ${d.year}';
-  }
-
-  String _formattedTime() {
-    final raw = booking.slotTiming.trim();
-    if (raw.isEmpty) return '—';
-    final parts = raw.split(':');
-    if (parts.length < 2) return raw;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (h == null || m == null) return raw;
-    final period = h >= 12 ? 'PM' : 'AM';
-    final h12 = h % 12 == 0 ? 12 : h % 12;
-    final mm = m.toString().padLeft(2, '0');
-    return '$h12:$mm $period';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final services = booking.serviceNames;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8E8E8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEFEF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.event_available_outlined,
-                  color: Color(0xFFB71C1C),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formattedDate(),
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1B1B1B),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _formattedTime(),
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF666666),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (booking.status.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Text(
-                    booking.status,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1B5E20),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (services.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final s in services)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4F4F4),
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: const Color(0xFFE0E0E0)),
-                    ),
-                    child: Text(
-                      s,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF333333),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-          if (booking.description.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              booking.description,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: const Color(0xFF777777),
-                height: 1.4,
-              ),
-            ),
-          ],
-          if (booking.licensePlate.isNotEmpty ||
-              booking.vehicleName.isNotEmpty ||
-              booking.vehicleBrand.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(
-                  Icons.directions_car_outlined,
-                  size: 14,
-                  color: Color(0xFF888888),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    _vehicleLine(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: const Color(0xFF888888),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (_canCancel) ...[
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFEFEFEF)),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: isCancelling ? null : onCancel,
-                icon: isCancelling
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFFB71C1C),
-                        ),
-                      )
-                    : const Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: Color(0xFFB71C1C),
-                      ),
-                label: Text(
-                  isCancelling ? 'Cancelling…' : 'Cancel booking',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFB71C1C),
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _vehicleLine() {
-    final parts = <String>[];
-    final brand = booking.vehicleBrand.trim();
-    final name = booking.vehicleName.trim();
-    if (brand.isNotEmpty) parts.add(displayMakeNameForUi(brand));
-    if (name.isNotEmpty) parts.add(displayMakeNameForUi(name));
-    final head = parts.join(' ');
-    final plate = booking.licensePlate.trim().toUpperCase();
-    if (head.isEmpty) return plate;
-    if (plate.isEmpty) return head;
-    return '$head  •  $plate';
   }
 }
 

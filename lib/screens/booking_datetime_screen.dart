@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../booking/slot_booking_logic.dart';
 import '../models/booking_cart_line.dart';
+import '../models/vehicle_model.dart';
 import '../models/workshop_slot.dart';
 import '../services/slot_service.dart';
+import '../widgets/get_started_primary_button.dart';
+import 'upcoming_booking_detail_screen.dart';
 
 /// Pick a date, then a start slot from GET /api/v1/slots.
 /// Multiple services require that many consecutive slots with capacity.
@@ -12,12 +15,13 @@ class BookingDateTimeScreen extends StatefulWidget {
   const BookingDateTimeScreen({
     super.key,
     required this.cartLines,
-    this.userVehicleId,
+    required this.vehicle,
+    required this.vehicles,
   });
 
   final List<BookingCartLine> cartLines;
-  /// `VehicleModel.id` from GET /api/v1/user/vehicle (user↔vehicle row).
-  final String? userVehicleId;
+  final VehicleModel vehicle;
+  final List<VehicleModel> vehicles;
 
   int get serviceCount => cartLines.length;
 
@@ -138,8 +142,8 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
       SlotBookingLogic.parseSlotTiming(s.slotTiming);
 
   Future<void> _submitBooking() async {
-    final vehicleId = widget.userVehicleId?.trim();
-    if (vehicleId == null || vehicleId.isEmpty) {
+    final vehicleId = widget.vehicle.id.trim();
+    if (vehicleId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -173,16 +177,18 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            bookingId != null
-                ? 'Booking confirmed ($bookingId)'
-                : 'Booking submitted.',
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) => UpcomingBookingDetailScreen(
+            vehicle: widget.vehicle,
+            vehicles: widget.vehicles,
+            bookingConfirmedMessage: bookingId != null
+                ? 'Booking confirmed'
+                : 'Booking submitted',
           ),
         ),
+        (route) => route.isFirst,
       );
-      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -399,40 +405,14 @@ class _BookingDateTimeScreenState extends State<BookingDateTimeScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: SizedBox(
-                height: 48,
+              child: GetStartedPrimaryButton(
                 width: double.infinity,
-                child: FilledButton(
-                  onPressed: (_selectedFirstSlot == null ||
-                          _resolvedServiceIds == null ||
-                          _submitting)
-                      ? null
-                      : _submitBooking,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(0xFFBDBDBD),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  child: _submitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          'Continue',
-                          style: GoogleFonts.dmSans(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                ),
+                height: 48,
+                label: _submitting ? 'Continuing…' : 'Continue',
+                enabled: _selectedFirstSlot != null &&
+                    _resolvedServiceIds != null &&
+                    !_submitting,
+                onPressed: _submitBooking,
               ),
             ),
           ),

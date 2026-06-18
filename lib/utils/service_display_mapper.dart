@@ -29,7 +29,6 @@ class ServiceCardPresentation {
     required this.glowColor,
     required this.gradientEndColor,
     this.headerIconAsset,
-    this.opensTyreBrandSheet = false,
   });
 
   final String imageAsset;
@@ -38,7 +37,6 @@ class ServiceCardPresentation {
   final IconData footerIcon;
   final Color glowColor;
   final Color gradientEndColor;
-  final bool opensTyreBrandSheet;
 }
 
 ServiceCardPresentation presentationForWorkshopService(WorkshopService s) {
@@ -57,7 +55,6 @@ ServiceCardPresentation presentationForWorkshopService(WorkshopService s) {
       footerIcon: Icons.info_outline,
       glowColor: const Color(0xFF88F8E9),
       gradientEndColor: const Color(0xFFE4FBF8),
-      opensTyreBrandSheet: true,
     );
   }
 

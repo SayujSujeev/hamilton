@@ -9,7 +9,6 @@ import '../utils/brand_display_name.dart';
 import '../utils/service_display_mapper.dart';
 import '../widgets/brand_logo_badge.dart';
 import '../widgets/get_started_primary_button.dart';
-import '../widgets/select_tyre_brand_sheet.dart';
 import 'add_new_vehicle_screen.dart';
 import 'booking_datetime_screen.dart';
 
@@ -104,7 +103,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
       glowColor: presentation.glowColor,
       gradientEndColor: presentation.gradientEndColor,
       headerIconAsset: presentation.headerIconAsset,
-      opensTyreBrandSheet: presentation.opensTyreBrandSheet,
       apiServiceTypeId: s.id,
     );
   }
@@ -147,8 +145,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final i = _selectedVehicleIndex.clamp(0, list.length - 1);
     return list[i];
   }
-
-  String? get _selectedVehicleUserRowId => _selectedVehicle?.id;
 
   void _showVehiclePickerSheet(BuildContext context) {
     final vehicles = widget.vehicles;
@@ -300,20 +296,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   int get _selectedCount => _cart.length;
 
-  Future<void> _handleAddToCart(_ServiceItemData item) async {
-    if (item.opensTyreBrandSheet) {
-      final result = await showSelectTyreBrandSheet(context);
-      if (!mounted || result == null) return;
-      setState(() {
-        _cart[item.cartKey] = BookingCartLine(
-          title: item.title,
-          subtitle: '${result.brandName} × ${result.quantity}',
-          serviceTypeId: item.apiServiceTypeId,
-        );
-      });
-      return;
-    }
-
+  void _handleAddToCart(_ServiceItemData item) {
     setState(() {
       _cart[item.cartKey] = BookingCartLine(
         title: item.title,
@@ -438,14 +421,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
           _BottomBookingBar(
             selectedCount: _selectedCount,
             lines: _cart.values.toList(growable: false),
-            onBookAll: _selectedCount > 0
+            onBookAll: _selectedCount > 0 && _selectedVehicle != null
                 ? () async {
+                    final vehicle = _selectedVehicle!;
                     await Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
                         builder: (_) => BookingDateTimeScreen(
                           cartLines:
                               _cart.values.toList(growable: false),
-                          userVehicleId: _selectedVehicleUserRowId,
+                          vehicle: vehicle,
+                          vehicles: widget.vehicles,
                         ),
                       ),
                     );
@@ -767,7 +752,6 @@ class _ServiceItemData {
     required this.gradientEndColor,
     this.headerIconAsset,
     this.imageUrl,
-    this.opensTyreBrandSheet = false,
     this.apiServiceTypeId,
   });
 
@@ -780,7 +764,6 @@ class _ServiceItemData {
   final Color glowColor;
   final Color gradientEndColor;
   final String? headerIconAsset;
-  final bool opensTyreBrandSheet;
   /// Backend `service_type` UUID from GET /api/v1/service.
   final String? apiServiceTypeId;
 

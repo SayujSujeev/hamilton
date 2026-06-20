@@ -109,13 +109,95 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Must match the height of [_HeroImageArea].
-  static const double _heroImageHeight = 408.0;
+  static double _heroImageHeight(BuildContext context) {
+    final screenH = MediaQuery.sizeOf(context).height;
+    return (screenH * 0.48).clamp(360.0, 420.0);
+  }
 
-  /// Must match the laid-out height of [_HeroDetailsSection].
-  static const double _heroDetailsHeight = 156.0;
+  @override
+  Widget build(BuildContext context) {
+    final v = _selectedVehicle;
+    if (v == null) {
+      return _HomeWithoutVehicleScaffold(
+        profileImageUrl: widget.profileImageUrl,
+      );
+    }
 
-  /// Gap between the white stats block and the action buttons.
-  static const double _gapBelowHeroDetails = 14.0;
+    final heroHeight = _heroImageHeight(context);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F4F4),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _HeroImageArea(
+                    height: heroHeight,
+                    vehicle: v,
+                    onOpenGarage: () => _showGarageSheet(context),
+                    profileImageUrl: widget.profileImageUrl,
+                  ),
+                  ColoredBox(
+                    color: Colors.white,
+                    child: _HeroDetailsSection(
+                      vehicle: v,
+                      allVehicles: widget.vehicles,
+                    ),
+                  ),
+                  const ColoredBox(
+                    color: Color(0xFFF4F4F4),
+                    child: SizedBox(height: 12),
+                  ),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 8,
+                          offset: Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ActionButtonsRow(
+                            userVehicleId: v.id,
+                            vehicles: widget.vehicles,
+                          ),
+                          const SizedBox(height: 14),
+                          const _PromoCard(),
+                          const SizedBox(height: 14),
+                          const _CarouselDots(),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const ColoredBox(
+                    color: Colors.white,
+                    child: SizedBox(height: 8),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _BottomNavBar(
+            userVehicleId: v.id,
+            vehicles: widget.vehicles,
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showGarageSheet(BuildContext context) {
     final vehicles = widget.vehicles;
@@ -206,183 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final v = _selectedVehicle;
-    if (v == null) {
-      return _HomeWithoutVehicleScaffold(
-        profileImageUrl: widget.profileImageUrl,
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F4),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: [
-                // ✅ Hero + Stats fixed behind everything
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: _HeroImageArea(
-                    vehicle: v,
-                    onOpenGarage: () => _showGarageSheet(context),
-                    profileImageUrl: widget.profileImageUrl,
-                  ),
-                ),
-
-                // ✅ Stats strip fixed just below hero (gets covered when scrolling)
-                Positioned(
-                  top: _heroImageHeight,
-                  left: 0,
-                  right: 0,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 0,
-                    child: _HeroDetailsSection(
-                      vehicle: v,
-                      allVehicles: widget.vehicles,
-                    ),
-                  ),
-                ),
-
-                // ✅ Scroll content slides OVER both hero AND stats
-                Positioned.fill(
-                  child: SingleChildScrollView(
-                    hitTestBehavior: HitTestBehavior.deferToChild,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Spacer = hero + stats height so card starts just below stats
-                        const SizedBox(
-                          height:
-                              _heroImageHeight +
-                              _heroDetailsHeight +
-                              _gapBelowHeroDetails,
-                        ),
-                        // ✅ White card — covers stats when scrolled up
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(24),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 12,
-                                offset: Offset(0, -4),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _ActionButtonsRow(
-                                  userVehicleId: v.id,
-                                  vehicles: widget.vehicles,
-                                ),
-                                const SizedBox(height: 14),
-                                const _PromoCard(),
-                                const SizedBox(height: 14),
-                                const _CarouselDots(),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _BottomNavBar(
-            userVehicleId: v.id,
-            vehicles: widget.vehicles,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Widget build(BuildContext context) {
-  //   return Scaffold(
-  //     backgroundColor: const Color(0xFFF4F4F4),
-  //     body: Column(
-  //       children: [
-  //         Expanded(
-  //           child: Stack(
-  //             clipBehavior: Clip.hardEdge,
-  //             children: [
-  //               // Hero stays fixed behind scroll.
-  //               const Positioned(
-  //                 top: 0,
-  //                 left: 0,
-  //                 right: 0,
-  //                 child: _HeroImageArea(),
-  //               ),
-  //               // Stats strip + buttons + promo scroll together.
-  //               Positioned.fill(
-  //                 child: Column(
-  //                   crossAxisAlignment: CrossAxisAlignment.stretch,
-  //                   children: [
-  //                     const SizedBox(height: _heroImageHeight),
-  //                     Expanded(
-  //                       child: ClipRect(
-  //                         child: SingleChildScrollView(
-  //                           padding: EdgeInsets.zero,
-  //                           child: Column(
-  //                             crossAxisAlignment: CrossAxisAlignment.stretch,
-  //                             children: [
-  //                               Material(
-  //                                 color: Colors.white,
-  //                                 elevation: 2,
-  //                                 shadowColor: Colors.black26,
-  //                                 child: const _HeroDetailsSection(),
-  //                               ),
-  //                               const SizedBox(height: _gapBelowHeroDetails),
-  //                               Padding(
-  //                                 padding: const EdgeInsets.symmetric(
-  //                                   horizontal: 16,
-  //                                 ),
-  //                                 child: Column(
-  //                                   crossAxisAlignment:
-  //                                       CrossAxisAlignment.stretch,
-  //                                   children: const [
-  //                                     _ActionButtonsRow(),
-  //                                     SizedBox(height: 14),
-  //                                     _PromoCard(),
-  //                                     SizedBox(height: 14),
-  //                                     _CarouselDots(),
-  //                                     SizedBox(height: 24),
-  //                                   ],
-  //                                 ),
-  //                               ),
-  //                             ],
-  //                           ),
-  //                         ),
-  //                       ),
-  //                     ),
-  //                   ],
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         const _BottomNavBar(),
-  //       ],
-  //     ),
-  //   );
-  // }
 }
 
 Future<void> _debugCopyBearerToken(BuildContext context) async {
@@ -669,11 +574,13 @@ class _HeroDetailsSection extends StatelessWidget {
 
 class _HeroImageArea extends StatelessWidget {
   const _HeroImageArea({
+    required this.height,
     required this.vehicle,
     required this.onOpenGarage,
     this.profileImageUrl,
   });
 
+  final double height;
   final VehicleModel vehicle;
   final VoidCallback onOpenGarage;
   final String? profileImageUrl;
@@ -681,7 +588,7 @@ class _HeroImageArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 408,
+      height: height,
       child: Stack(
         children: [
           const Positioned.fill(child: ColoredBox(color: Color(0xFF43001E))),
@@ -710,7 +617,9 @@ class _HeroImageArea extends StatelessWidget {
                     profileImageUrl: profileImageUrl,
                   ),
                   const SizedBox(height: 8),
-                  _CarHeroBody(vehicle: vehicle),
+                  Expanded(
+                    child: _CarHeroBody(vehicle: vehicle),
+                  ),
                 ],
               ),
             ),
@@ -736,7 +645,6 @@ class _TopBadgesRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final chipLabel = _vehicleHeroChipLabel(vehicle);
     return SizedBox(
-      width: 358,
       height: 32,
       child: Stack(
         children: [
@@ -761,7 +669,9 @@ class _TopBadgesRow extends StatelessWidget {
                 onTap: onOpenGarage,
                 borderRadius: BorderRadius.circular(100),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 220),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.52,
+                  ),
                   child: Ink(
                     width: double.infinity,
                     height: 32,
@@ -967,7 +877,7 @@ class _GarageAddVehicleBar extends StatelessWidget {
         border: Border(top: BorderSide(color: Color(0xFFE6E6E6))),
       ),
       child: GetStartedPrimaryButton(
-        width: 358,
+        width: double.infinity,
         height: 48,
         label: '+ Add New Vehicle',
         onPressed: onPressed,
@@ -983,7 +893,6 @@ class _CarHeroBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     final brand = vehicle.brandName.trim().isEmpty
         ? '—'
         : displayMakeNameForUi(vehicle.brandName);
@@ -992,40 +901,38 @@ class _CarHeroBody extends StatelessWidget {
         : displayMakeNameForUi(vehicle.name);
     final url = vehicle.imageUrl?.trim();
     final hasNetworkImage = url != null && url.isNotEmpty;
+    final screenW = MediaQuery.sizeOf(context).width;
+    final carWidth = (screenW * 0.62).clamp(200.0, 280.0);
 
-    return SizedBox(
-      height: 300,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 20,
-            child: SizedBox(
-              width: 220,
-              height: 160,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.topLeft,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          height: constraints.maxHeight > 0 ? constraints.maxHeight : 300,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                top: 12,
+                right: screenW * 0.35,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-
-                    const SizedBox(height: 6),
                     Text(
                       brand,
                       style: GoogleFonts.dmSans(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: Colors.white.withValues(alpha: 0.88),
                         height: 1.1,
                         letterSpacing: 0.2,
                       ),
-                    ),   Text(
+                    ),
+                    Text(
                       model,
                       style: GoogleFonts.dmSerifText(
-                        fontSize: 48,
+                        fontSize: screenW < 360 ? 40 : 48,
                         color: Colors.white,
                         height: 1.05,
                         fontWeight: FontWeight.w400,
@@ -1035,44 +942,34 @@ class _CarHeroBody extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ),
-          Positioned(
-            left: 40,
-            top: 132,
-            width: 249,
-            height: 180,
-            child: hasNetworkImage
-                ? Image.network(
-                    url,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Image.asset(
-                      'assets/images/home_bmw_x5.png',
-                      fit: BoxFit.contain,
-                    ),
-                  )
-                : Image.asset(
-                    'assets/images/home_bmw_x5.png',
-                    fit: BoxFit.contain,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Center(
+                  child: SizedBox(
+                    width: carWidth,
+                    height: carWidth * 0.72,
+                    child: hasNetworkImage
+                        ? Image.network(
+                            url,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Image.asset(
+                              'assets/images/home_bmw_x5.png',
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        : Image.asset(
+                            'assets/images/home_bmw_x5.png',
+                            fit: BoxFit.contain,
+                          ),
                   ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 4,
-            child: Center(
-              child: Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFB3001E),
-                  shape: BoxShape.circle,
                 ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -1093,25 +990,21 @@ class _ServiceStatsRow extends StatelessWidget {
         ? sd!.avrgServiceDuration!.trim()
         : '—';
 
-    return SizedBox(
-      width: 358,
-      height: 32,
+    return IntrinsicHeight(
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: _StatItem(
               title: 'Last Serviced On',
               value: lastDate,
-              titleWidth: 95,
-              titleHeight: 14,
             ),
           ),
-          const SizedBox(width: 8),
+          const _StatDivider(),
           Expanded(
             child: _StatItem(title: 'Last Service Time', value: lastDur),
           ),
-          const SizedBox(width: 8),
+          const _StatDivider(),
           Expanded(
             child: _StatItem(title: 'Avg. Service Time', value: avgDur),
           ),
@@ -1121,52 +1014,57 @@ class _ServiceStatsRow extends StatelessWidget {
   }
 }
 
+class _StatDivider extends StatelessWidget {
+  const _StatDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 10),
+      child: VerticalDivider(
+        width: 1,
+        thickness: 1,
+        color: Color(0xFFE0E0E0),
+      ),
+    );
+  }
+}
+
 class _StatItem extends StatelessWidget {
   const _StatItem({
     required this.title,
     required this.value,
-    this.titleWidth,
-    this.titleHeight,
   });
 
   final String title;
   final String value;
-  final double? titleWidth;
-  final double? titleHeight;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        SizedBox(
-          width: titleWidth,
-          height: titleHeight,
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: const Color(0xFF6B6B6B),
-              fontWeight: FontWeight.w400,
-              fontStyle: FontStyle.normal,
-              height: 1.0,
-              letterSpacing: 0,
-            ),
+        Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            fontSize: 10.5,
+            color: const Color(0xFF6B6B6B),
+            fontWeight: FontWeight.w400,
+            height: 1.2,
           ),
         ),
+        const SizedBox(height: 6),
         Text(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
-            fontSize: 14,
+            fontSize: 13,
             color: Colors.black,
             fontWeight: FontWeight.w600,
             height: 1.0,
-            letterSpacing: 0,
           ),
         ),
       ],
@@ -1182,7 +1080,6 @@ class _ViewDetailsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 358,
       height: 40,
       child: OutlinedButton(
         onPressed: () {
@@ -1234,7 +1131,6 @@ class _UpcomingBookingDetailButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 358,
       height: 40,
       child: OutlinedButton(
         onPressed: () {
@@ -1292,10 +1188,8 @@ class _ActionButtonsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        SizedBox(
-          width: 157,
+        Expanded(
           child: _DarkActionButton(
             icon: Icons.calendar_month_outlined,
             label: 'Book Service',
@@ -1313,8 +1207,7 @@ class _ActionButtonsRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        const SizedBox(
-          width: 163,
+        const Expanded(
           child: _DarkActionButton(
             icon: Icons.local_shipping_outlined,
             label: 'Schedule Pickup',
@@ -1353,20 +1246,27 @@ class _DarkActionButton extends StatelessWidget {
           ),
           Positioned.fill(
             child: IgnorePointer(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 16, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: GoogleFonts.dmSans(
-                      color: Colors.white,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 16, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

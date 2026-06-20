@@ -396,15 +396,21 @@ class ApiClient {
   }
 
   /// GET /api/v1/brand — returns a paginated list of all brands.
+  /// [type] can be 'vehicle' or 'spare' to filter brand types.
   Future<List<Map<String, dynamic>>> getBrands({
     int offset = 0,
     int limit = 50,
+    String? type,
   }) async {
+    final queryParameters = <String, String>{
+      'offset': offset.toString(),
+      'limit': limit.toString(),
+    };
+    if (type != null && type.isNotEmpty) {
+      queryParameters['type'] = type;
+    }
     final uri = Uri.parse('$baseUrl/brand').replace(
-      queryParameters: {
-        'offset': offset.toString(),
-        'limit': limit.toString(),
-      },
+      queryParameters: queryParameters,
     );
     final headers = await _getHeaders();
     if (kDebugMode) {

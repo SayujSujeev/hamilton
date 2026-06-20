@@ -121,7 +121,7 @@ class _AddNewVehicleScreenState extends State<AddNewVehicleScreen> {
     }
 
     try {
-      final rawList = await _apiClient.getBrands();
+      final rawList = await _apiClient.getBrands(type: 'vehicle');
 
       final brands = rawList
           .map((item) {

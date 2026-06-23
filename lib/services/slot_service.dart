@@ -85,13 +85,7 @@ class SlotService {
 
   Future<List<UserBooking>> fetchUserBookings() async {
     return _api.handleAuthErrors(() async {
-      final fromBooking = await _fetchBookingsFromEndpoint('/user/booking');
-      if (fromBooking.isNotEmpty) return fromBooking;
-
-      if (kDebugMode) {
-        debugPrint('[SlotService] /user/booking empty — trying /user/slots');
-      }
-      return _fetchBookingsFromEndpoint('/user/slots');
+      return _fetchBookingsFromEndpoint('/user/booking');
     });
   }
 

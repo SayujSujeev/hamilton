@@ -3,11 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/live_service.dart';
 import '../models/vehicle_model.dart';
 import '../services/auth_service.dart';
+import '../services/live_service_service.dart';
 import '../utils/brand_display_name.dart';
 import '../widgets/brand_logo_badge.dart';
 import '../widgets/get_started_primary_button.dart';
+import '../widgets/live_service_mini_card.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
 import 'profile_screen.dart';
@@ -89,6 +92,46 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedVehicleIndex = 0;
+  List<LiveService> _liveServices = const [];
+  final LiveServiceService _liveServiceService = LiveServiceService();
+
+  /// Poll interval — checks for active services every 30 seconds so the
+  /// mini card appears/disappears without requiring an app restart.
+  static const _pollInterval = Duration(seconds: 30);
+  bool _polling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveServices();
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _polling = false;
+    super.dispose();
+  }
+
+  void _startPolling() {
+    _polling = true;
+    Future.doWhile(() async {
+      await Future<void>.delayed(_pollInterval);
+      if (!_polling || !mounted) return false;
+      await _fetchLiveServices();
+      return _polling && mounted;
+    });
+  }
+
+  Future<void> _fetchLiveServices() async {
+    try {
+      final services = await _liveServiceService.fetchLiveServices();
+      if (!mounted) return;
+      setState(() => _liveServices = services);
+    } catch (_) {
+      // silently ignore — live service is non-critical for home screen
+    }
+  }
 
   @override
   void didUpdateWidget(HomeScreen oldWidget) {
@@ -175,6 +218,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             vehicles: widget.vehicles,
                           ),
                           const SizedBox(height: 14),
+                          if (_liveServices.isNotEmpty) ...[
+                            ..._liveServices.map(
+                              (ls) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: LiveServiceMiniCard(liveService: ls),
+                              ),
+                            ),
+                          ],
                           const _PromoCard(),
                           const SizedBox(height: 14),
                           const _CarouselDots(),

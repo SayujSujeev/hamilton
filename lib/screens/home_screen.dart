@@ -168,83 +168,109 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final heroHeight = _heroImageHeight(context);
 
+    final safeBottom = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _HeroImageArea(
-                    height: heroHeight,
-                    vehicle: v,
-                    onOpenGarage: () => _showGarageSheet(context),
-                    profileImageUrl: widget.profileImageUrl,
-                  ),
-                  ColoredBox(
-                    color: Colors.white,
-                    child: _HeroDetailsSection(
-                      vehicle: v,
-                      allVehicles: widget.vehicles,
-                    ),
-                  ),
-                  const ColoredBox(
-                    color: Color(0xFFF4F4F4),
-                    child: SizedBox(height: 12),
-                  ),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(24),
+          Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  // Extra bottom padding so content isn't hidden behind
+                  // the floating live-service card when it is visible.
+                  padding: _liveServices.isNotEmpty
+                      ? const EdgeInsets.only(bottom: 80)
+                      : EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _HeroImageArea(
+                        height: heroHeight,
+                        vehicle: v,
+                        onOpenGarage: () => _showGarageSheet(context),
+                        profileImageUrl: widget.profileImageUrl,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 8,
-                          offset: Offset(0, -2),
+                      ColoredBox(
+                        color: Colors.white,
+                        child: _HeroDetailsSection(
+                          vehicle: v,
+                          allVehicles: widget.vehicles,
                         ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _ActionButtonsRow(
-                            userVehicleId: v.id,
-                            vehicles: widget.vehicles,
+                      ),
+                      const ColoredBox(
+                        color: Color(0xFFF4F4F4),
+                        child: SizedBox(height: 12),
+                      ),
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
-                          const SizedBox(height: 14),
-                          if (_liveServices.isNotEmpty) ...[
-                            ..._liveServices.map(
-                              (ls) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: LiveServiceMiniCard(liveService: ls),
-                              ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 8,
+                              offset: Offset(0, -2),
                             ),
                           ],
-                          const _PromoCard(),
-                          const SizedBox(height: 14),
-                          const _CarouselDots(),
-                        ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _ActionButtonsRow(
+                                userVehicleId: v.id,
+                                vehicles: widget.vehicles,
+                              ),
+                              const SizedBox(height: 14),
+                              const _PromoCard(),
+                              const SizedBox(height: 14),
+                              const _CarouselDots(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      const ColoredBox(
+                        color: Colors.white,
+                        child: SizedBox(height: 8),
+                      ),
+                    ],
                   ),
-                  const ColoredBox(
-                    color: Colors.white,
-                    child: SizedBox(height: 8),
-                  ),
-                ],
+                ),
+              ),
+              _BottomNavBar(
+                userVehicleId: v.id,
+                vehicles: widget.vehicles,
+              ),
+            ],
+          ),
+          // Swiggy-style floating live-service card — sits above the
+          // bottom nav bar, outside the scroll flow, always visible.
+          if (_liveServices.isNotEmpty)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: safeBottom + 64 + 10,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _liveServices
+                    .map(
+                      (ls) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          elevation: 10,
+                          shadowColor: Colors.black38,
+                          borderRadius: BorderRadius.circular(14),
+                          child: LiveServiceMiniCard(liveService: ls),
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
             ),
-          ),
-          _BottomNavBar(
-            userVehicleId: v.id,
-            vehicles: widget.vehicles,
-          ),
         ],
       ),
     );

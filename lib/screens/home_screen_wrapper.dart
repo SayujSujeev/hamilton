@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import '../models/vehicle_model.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_bottom_nav_bar.dart';
 import 'home_screen.dart';
+import 'service_history_screen.dart';
+import 'services_screen.dart';
 
-/// Wrapper that loads user vehicles and displays appropriate HomeScreen version
+/// Loads user data and hosts the main tab shell (Home / Services / History).
 class HomeScreenWrapper extends StatefulWidget {
   const HomeScreenWrapper({super.key});
 
@@ -20,6 +23,8 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
   String? _profileImageUrl;
   bool _isLoading = true;
   String? _errorMessage;
+  MainTab _currentTab = MainTab.home;
+  String? _selectedVehicleId;
 
   @override
   void initState() {
@@ -35,7 +40,7 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
 
     try {
       final isAuthenticated = await _authService.isAuthenticated();
-      
+
       if (!isAuthenticated) {
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/login');
@@ -57,6 +62,8 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
         setState(() {
           _vehicles = vehicles;
           _profileImageUrl = profileImageUrl;
+          _selectedVehicleId =
+              vehicles.isNotEmpty ? vehicles.first.id : null;
           _isLoading = false;
         });
       }
@@ -74,6 +81,11 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
         }
       }
     }
+  }
+
+  void _onSelectedVehicleChanged(String? vehicleId) {
+    if (_selectedVehicleId == vehicleId) return;
+    setState(() => _selectedVehicleId = vehicleId);
   }
 
   @override
@@ -138,9 +150,37 @@ class _HomeScreenWrapperState extends State<HomeScreenWrapper> {
       );
     }
 
-    return HomeScreen(
-      vehicles: _vehicles ?? [],
-      profileImageUrl: _profileImageUrl,
+    final vehicles = _vehicles ?? [];
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F4F4),
+      body: Column(
+        children: [
+          Expanded(
+            child: IndexedStack(
+              index: _currentTab.index,
+              children: [
+                HomeScreen(
+                  vehicles: vehicles,
+                  profileImageUrl: _profileImageUrl,
+                  onOpenServices: () =>
+                      setState(() => _currentTab = MainTab.services),
+                  onSelectedVehicleChanged: _onSelectedVehicleChanged,
+                ),
+                ServicesScreen(
+                  vehicles: vehicles,
+                  userVehicleId: _selectedVehicleId,
+                ),
+                const ServiceHistoryScreen(),
+              ],
+            ),
+          ),
+          AppBottomNavBar(
+            currentTab: _currentTab,
+            onTabSelected: (tab) => setState(() => _currentTab = tab),
+          ),
+        ],
+      ),
     );
   }
 }

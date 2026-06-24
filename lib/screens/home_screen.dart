@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,8 +13,6 @@ import '../widgets/live_service_mini_card.dart';
 import 'add_first_vehicle_screen.dart';
 import 'add_new_vehicle_screen.dart';
 import 'profile_screen.dart';
-import 'phone_registration_screen.dart';
-import 'service_history_screen.dart';
 import 'services_screen.dart';
 import 'upcoming_booking_detail_screen.dart';
 import 'vehicle_detail_screen.dart';
@@ -81,10 +78,14 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.vehicles = const [],
     this.profileImageUrl,
+    this.onOpenServices,
+    this.onSelectedVehicleChanged,
   });
 
   final List<VehicleModel> vehicles;
   final String? profileImageUrl;
+  final VoidCallback? onOpenServices;
+  final ValueChanged<String?>? onSelectedVehicleChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -105,6 +106,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _fetchLiveServices();
     _startPolling();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifySelectedVehicle());
+  }
+
+  void _notifySelectedVehicle() {
+    widget.onSelectedVehicleChanged?.call(_selectedVehicle?.id);
   }
 
   @override
@@ -142,6 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_selectedVehicleIndex >= n) {
       _selectedVehicleIndex = n - 1;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifySelectedVehicle());
   }
 
   VehicleModel? get _selectedVehicle {
@@ -168,84 +175,74 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final heroHeight = _heroImageHeight(context);
 
-    final safeBottom = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
       body: Stack(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  // Extra bottom padding so content isn't hidden behind
-                  // the floating live-service card when it is visible.
-                  padding: _liveServices.isNotEmpty
-                      ? const EdgeInsets.only(bottom: 80)
-                      : EdgeInsets.zero,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _HeroImageArea(
-                        height: heroHeight,
-                        vehicle: v,
-                        onOpenGarage: () => _showGarageSheet(context),
-                        profileImageUrl: widget.profileImageUrl,
-                      ),
-                      ColoredBox(
-                        color: Colors.white,
-                        child: _HeroDetailsSection(
-                          vehicle: v,
-                          allVehicles: widget.vehicles,
-                        ),
-                      ),
-                      const ColoredBox(
-                        color: Color(0xFFF4F4F4),
-                        child: SizedBox(height: 12),
-                      ),
-                      Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(24),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 8,
-                              offset: Offset(0, -2),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _ActionButtonsRow(
-                                userVehicleId: v.id,
-                                vehicles: widget.vehicles,
-                              ),
-                              const SizedBox(height: 14),
-                              const _PromoCard(),
-                              const SizedBox(height: 14),
-                              const _CarouselDots(),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const ColoredBox(
-                        color: Colors.white,
-                        child: SizedBox(height: 8),
+          SingleChildScrollView(
+            // Extra bottom padding so content isn't hidden behind
+            // the floating live-service card when it is visible.
+            padding: _liveServices.isNotEmpty
+                ? const EdgeInsets.only(bottom: 80)
+                : EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _HeroImageArea(
+                  height: heroHeight,
+                  vehicle: v,
+                  onOpenGarage: () => _showGarageSheet(context),
+                  profileImageUrl: widget.profileImageUrl,
+                ),
+                ColoredBox(
+                  color: Colors.white,
+                  child: _HeroDetailsSection(
+                    vehicle: v,
+                    allVehicles: widget.vehicles,
+                  ),
+                ),
+                const ColoredBox(
+                  color: Color(0xFFF4F4F4),
+                  child: SizedBox(height: 12),
+                ),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 8,
+                        offset: Offset(0, -2),
                       ),
                     ],
                   ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ActionButtonsRow(
+                          userVehicleId: v.id,
+                          vehicles: widget.vehicles,
+                          onOpenServices: widget.onOpenServices,
+                        ),
+                        const SizedBox(height: 14),
+                        const _PromoCard(),
+                        const SizedBox(height: 14),
+                        const _CarouselDots(),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              _BottomNavBar(
-                userVehicleId: v.id,
-                vehicles: widget.vehicles,
-              ),
-            ],
+                const ColoredBox(
+                  color: Colors.white,
+                  child: SizedBox(height: 8),
+                ),
+              ],
+            ),
           ),
           // Swiggy-style floating live-service card — sits above the
           // bottom nav bar, outside the scroll flow, always visible.
@@ -253,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Positioned(
               left: 16,
               right: 16,
-              bottom: safeBottom + 64 + 10,
+              bottom: 10,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: _liveServices
@@ -337,6 +334,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   selected: index == selectedIdx,
                                   onTap: () {
                                     setState(() => _selectedVehicleIndex = index);
+                                    _notifySelectedVehicle();
                                     Navigator.of(sheetContext).pop();
                                   },
                                 );
@@ -397,16 +395,13 @@ class _HomeWithoutVehicleScaffold extends StatelessWidget {
     final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 460,
+              child: Stack(
                 children: [
-                  SizedBox(
-                    height: 460,
-                    child: Stack(
-                      children: [
                         Positioned.fill(
                           child: DecoratedBox(
                             decoration: const BoxDecoration(
@@ -484,20 +479,16 @@ class _HomeWithoutVehicleScaffold extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Container(
-                    width: double.infinity,
-                    color: const Color(0xFFF4F4F4),
-                    child: const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: _NoVehiclePromoCarousel(),
-                    ),
-                  ),
-                ],
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFF4F4F4),
+              child: const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+                child: _NoVehiclePromoCarousel(),
               ),
             ),
-          ),
-          const _BottomNavBar(),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1257,10 +1248,12 @@ class _ActionButtonsRow extends StatelessWidget {
   const _ActionButtonsRow({
     required this.userVehicleId,
     required this.vehicles,
+    this.onOpenServices,
   });
 
   final String userVehicleId;
   final List<VehicleModel> vehicles;
+  final VoidCallback? onOpenServices;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,6 +1265,10 @@ class _ActionButtonsRow extends StatelessWidget {
             label: 'Book Service',
             imageAsset: 'assets/images/home_btn_book_service.png',
             onPressed: () {
+              if (onOpenServices != null) {
+                onOpenServices!();
+                return;
+              }
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => ServicesScreen(
@@ -1471,168 +1468,6 @@ class _Dot extends StatelessWidget {
       decoration: BoxDecoration(
         color: active ? const Color(0xFF1A1A1A) : const Color(0xFFBBBBBB),
         borderRadius: BorderRadius.circular(99),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// BOTTOM NAV
-// ─────────────────────────────────────────────────────────
-class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({
-    this.userVehicleId,
-    this.vehicles = const [],
-  });
-
-  final String? userVehicleId;
-  final List<VehicleModel> vehicles;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFEAEAEA))),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            const _NavItem(
-              icon: Icons.home_rounded,
-              label: 'Home',
-              active: true,
-            ),
-            _NavItem(
-              icon: Icons.handyman_outlined,
-              label: 'Services',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => ServicesScreen(
-                      userVehicleId: userVehicleId,
-                      vehicles: vehicles,
-                    ),
-                  ),
-                );
-              },
-            ),
-            _NavItem(
-              icon: Icons.history,
-              label: 'History',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ServiceHistoryScreen(),
-                  ),
-                );
-              },
-            ),
-            _NavItem(
-              icon: Icons.logout,
-              label: 'Logout',
-              onTap: () => _confirmLogout(context),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Log out?',
-          style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'You will need to sign in again with your phone number.',
-          style: GoogleFonts.dmSans(fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFB71C1C),
-              foregroundColor: Colors.white,
-            ),
-            child: Text(
-              'Log out',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    final authService = AuthService();
-    await authService.clearToken();
-    try {
-      await FirebaseAuth.instance.signOut();
-    } catch (_) {}
-    try {
-      await authService.signOutGoogle();
-    } catch (_) {}
-
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const PhoneRegistrationScreen()),
-      (_) => false,
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? const Color(0xFF111111) : const Color(0xFF999999);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: GoogleFonts.dmSans(
-                color: color,
-                fontSize: 10,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -11,6 +11,7 @@ class GetStartedPrimaryButton extends StatelessWidget {
     this.width = designWidth,
     this.height = designHeight,
     this.label = 'Get Started',
+    this.fontSize = 15,
     this.enabled = true,
   });
 
@@ -18,6 +19,7 @@ class GetStartedPrimaryButton extends StatelessWidget {
   final double width;
   final double height;
   final String label;
+  final double fontSize;
   final bool enabled;
 
   static const double designWidth = 358;
@@ -63,10 +65,13 @@ class GetStartedPrimaryButton extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
                         label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.dmSans(
                           color: Colors.white,
-                          fontSize: 15,
+                          fontSize: fontSize,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.2,
                           shadows: const [

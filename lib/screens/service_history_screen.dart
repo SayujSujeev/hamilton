@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/service_history.dart';
 import '../services/service_history_service.dart';
 import '../utils/brand_display_name.dart';
 import '../widgets/get_started_primary_button.dart';
+import 'service_history_detail_screen.dart';
 
 class ServiceHistoryScreen extends StatefulWidget {
   const ServiceHistoryScreen({super.key});
@@ -56,6 +58,38 @@ class _ServiceHistoryScreenState extends State<ServiceHistoryScreen> {
     }
   }
 
+  void _openDetail(ServiceHistory item) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ServiceHistoryDetailScreen(summary: item),
+      ),
+    );
+  }
+
+  Future<void> _openBill(ServiceHistory item) async {
+    final url = item.billUrl?.trim();
+    if (url == null || url.isEmpty) {
+      _openDetail(item);
+      return;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          content: Text(
+            'Could not open bill.',
+            style: GoogleFonts.dmSans(color: Colors.white),
+          ),
+        ),
+      );
+    }
+  }
+
   String _formatDate(DateTime? date) {
     if (date == null) return '—';
     const months = <String>[
@@ -70,10 +104,7 @@ class _ServiceHistoryScreenState extends State<ServiceHistoryScreen> {
     return '$km km';
   }
 
-  String _formatTotal(double total) {
-    if (total <= 0) return '—';
-    return 'QAR ${total.toStringAsFixed(2)}';
-  }
+  String _formatTotal(double total) => 'QAR ${total.toStringAsFixed(2)}';
 
   @override
   Widget build(BuildContext context) {
@@ -200,6 +231,8 @@ class _ServiceHistoryScreenState extends State<ServiceHistoryScreen> {
           dateLabel: _formatDate(item.serviceDate),
           odoLabel: _formatOdo(item.odoReading),
           totalLabel: _formatTotal(item.grandTotal),
+          onTap: () => _openDetail(item),
+          onViewBill: () => _openBill(item),
         );
       },
     );
@@ -212,12 +245,16 @@ class _HistoryCard extends StatelessWidget {
     required this.dateLabel,
     required this.odoLabel,
     required this.totalLabel,
+    required this.onTap,
+    required this.onViewBill,
   });
 
   final ServiceHistory item;
   final String dateLabel;
   final String odoLabel;
   final String totalLabel;
+  final VoidCallback onTap;
+  final VoidCallback onViewBill;
 
   @override
   Widget build(BuildContext context) {
@@ -225,74 +262,135 @@ class _HistoryCard extends StatelessWidget {
         ? 'Vehicle'
         : displayMakeNameForUi(item.vehicleName);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    final servicePreview = item.serviceNames.isNotEmpty
+        ? item.serviceNames.take(2).join(' • ')
+        : (item.hasItems
+            ? '${item.items.length} bill item${item.items.length == 1 ? '' : 's'}'
+            : 'Tap for bill & service details');
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8E8E8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE8E8E8)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEFEF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.history,
-                  color: Color(0xFFB71C1C),
-                  size: 20,
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFEFEF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.receipt_long_outlined,
+                      color: Color(0xFFB71C1C),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          vehicleName,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1B1B1B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Service date • $dateLabel',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF666666),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Bill total',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF9E9E9E),
+                        ),
+                      ),
+                      Text(
+                        totalLabel,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1B1B1B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                servicePreview,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: const Color(0xFF555555),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      vehicleName,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1B1B1B),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      dateLabel,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF666666),
-                      ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _MetaChip(icon: Icons.speed_outlined, label: odoLabel),
+                  if (item.licensePlate.trim().isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    _MetaChip(
+                      icon: Icons.pin_outlined,
+                      label: item.licensePlate.toUpperCase(),
                     ),
                   ],
-                ),
-              ),
-              if (totalLabel != '—')
-                Text(
-                  totalLabel,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF1B1B1B),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: onViewBill,
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    label: Text(
+                      'View Bill',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFB71C1C),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _MetaChip(icon: Icons.speed_outlined, label: odoLabel),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

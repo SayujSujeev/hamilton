@@ -12,4 +12,11 @@ class ServiceHistoryService {
       return await _api.getUserServiceHistory();
     });
   }
+
+  /// GET /api/v1/user/service-history/{id} — bill and line-item details.
+  Future<ServiceHistory> fetchServiceHistoryDetail(String id) async {
+    return _api.handleAuthErrors(() async {
+      return await _api.getUserServiceHistoryDetail(id);
+    });
+  }
 }

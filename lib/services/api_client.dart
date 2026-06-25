@@ -395,6 +395,17 @@ class ApiClient {
         .toList();
   }
 
+  /// GET /api/v1/user/service-history/{id} — full bill and service details.
+  Future<ServiceHistory> getUserServiceHistoryDetail(String id) async {
+    final response = await get('/user/service-history/$id');
+    final json = parseJson(response);
+    final data = json['data'];
+    if (data is Map<String, dynamic>) {
+      return ServiceHistory.fromJson(data);
+    }
+    throw Exception('Service history detail missing in response: ${response.body}');
+  }
+
   /// GET /api/v1/brand — returns a paginated list of all brands.
   /// [type] can be 'vehicle' or 'spare' to filter brand types.
   Future<List<Map<String, dynamic>>> getBrands({

@@ -16,6 +16,7 @@ class ServiceHistory {
     this.serviceNames = const [],
     this.items = const [],
     this.billUrl,
+    this.invoiceId,
     this.serviceInTime,
     this.serviceOutTime,
   });
@@ -33,10 +34,20 @@ class ServiceHistory {
   final List<String> serviceNames;
   final List<LiveServiceItem> items;
   final String? billUrl;
+  final String? invoiceId;
   final DateTime? serviceInTime;
   final DateTime? serviceOutTime;
 
   bool get hasBillUrl => billUrl != null && billUrl!.trim().isNotEmpty;
+
+  bool get hasInvoiceId => invoiceId != null && invoiceId!.trim().isNotEmpty;
+
+  /// Invoice API id when present, otherwise the service history id.
+  String? get effectiveInvoiceId {
+    if (hasInvoiceId) return invoiceId!.trim();
+    if (id.trim().isNotEmpty) return id.trim();
+    return null;
+  }
 
   bool get hasCostBreakdown =>
       totalPartsCost > 0 || totalLaborCost > 0 || discount > 0;
@@ -150,6 +161,7 @@ class ServiceHistory {
         'pdf_url',
         'pdfUrl',
       ]),
+      invoiceId: _pickInvoiceId(json),
       serviceInTime: _pickDateTime(json, const [
         'service_in_time',
         'serviceInTime',
@@ -161,6 +173,22 @@ class ServiceHistory {
         'checked_out_at',
       ]),
     );
+  }
+
+  static String? _pickInvoiceId(Map<String, dynamic> json) {
+    final direct = _pickNullableString(json, const [
+      'invoice_id',
+      'invoiceId',
+    ]);
+    if (direct != null) return direct;
+
+    final invoice = _asMap(json['invoice']);
+    if (invoice != null) {
+      final nested = _pickNullableString(invoice, const ['id', 'invoice_id']);
+      if (nested != null) return nested;
+    }
+
+    return null;
   }
 
   static List<String> _pickServiceNames(Map<String, dynamic> json) {

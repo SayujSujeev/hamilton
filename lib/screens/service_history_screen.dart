@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/service_history.dart';
+import '../services/invoice_service.dart';
 import '../services/service_history_service.dart';
 import '../utils/brand_display_name.dart';
 import '../widgets/get_started_primary_button.dart';
@@ -17,6 +17,7 @@ class ServiceHistoryScreen extends StatefulWidget {
 
 class _ServiceHistoryScreenState extends State<ServiceHistoryScreen> {
   final ServiceHistoryService _service = ServiceHistoryService();
+  final InvoiceService _invoiceService = InvoiceService();
 
   bool _loading = true;
   String? _error;
@@ -67,22 +68,20 @@ class _ServiceHistoryScreenState extends State<ServiceHistoryScreen> {
   }
 
   Future<void> _openBill(ServiceHistory item) async {
-    final url = item.billUrl?.trim();
-    if (url == null || url.isEmpty) {
-      _openDetail(item);
-      return;
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched && mounted) {
+    try {
+      await _invoiceService.openBill(item);
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      if (message.contains('not available')) {
+        _openDetail(item);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade700,
           content: Text(
-            'Could not open bill.',
+            message,
             style: GoogleFonts.dmSans(color: Colors.white),
           ),
         ),

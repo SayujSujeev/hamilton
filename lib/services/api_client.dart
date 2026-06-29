@@ -406,6 +406,33 @@ class ApiClient {
     throw Exception('Service history detail missing in response: ${response.body}');
   }
 
+  /// GET /api/v1/invoice/{id} — invoice / bill data.
+  Future<ServiceHistory> getInvoice(String id) async {
+    final response = await get('/invoice/$id');
+    final json = parseJson(response);
+    final data = json['data'];
+    if (data is Map<String, dynamic>) {
+      return ServiceHistory.fromJson(data);
+    }
+    throw Exception('Invoice missing in response: ${response.body}');
+  }
+
+  /// GET /api/v1/invoice/{id}/download — invoice PDF or download URL.
+  Future<http.Response> downloadInvoice(String id) async {
+    final token = await _authService.getToken();
+    final uri = Uri.parse('$baseUrl/invoice/$id/download');
+    final headers = <String, String>{
+      'Accept': 'application/pdf, application/octet-stream, application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    try {
+      return await http.get(uri, headers: headers);
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
   /// GET /api/v1/brand — returns a paginated list of all brands.
   /// [type] can be 'vehicle' or 'spare' to filter brand types.
   Future<List<Map<String, dynamic>>> getBrands({

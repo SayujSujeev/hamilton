@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/live_service.dart';
 import '../models/service_history.dart';
+import '../services/invoice_service.dart';
 import '../services/service_history_service.dart';
 import '../utils/brand_display_name.dart';
 import '../widgets/get_started_primary_button.dart';
@@ -23,6 +23,7 @@ class ServiceHistoryDetailScreen extends StatefulWidget {
 
 class _ServiceHistoryDetailScreenState extends State<ServiceHistoryDetailScreen> {
   final ServiceHistoryService _service = ServiceHistoryService();
+  final InvoiceService _invoiceService = InvoiceService();
 
   bool _loading = true;
   String? _error;
@@ -43,9 +44,21 @@ class _ServiceHistoryDetailScreenState extends State<ServiceHistoryDetailScreen>
 
     try {
       final detail = await _service.fetchServiceHistoryDetail(widget.summary.id);
+      var merged = _mergeDetail(widget.summary, detail);
+
+      final invoiceId = merged.effectiveInvoiceId;
+      if (invoiceId != null) {
+        try {
+          final invoice = await _invoiceService.fetchInvoice(invoiceId);
+          merged = _mergeDetail(merged, invoice);
+        } catch (_) {
+          // Keep service-history detail when invoice endpoint is unavailable.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
-        _record = _mergeDetail(widget.summary, detail);
+        _record = merged;
         _loading = false;
       });
     } catch (e) {
@@ -79,37 +92,22 @@ class _ServiceHistoryDetailScreenState extends State<ServiceHistoryDetailScreen>
           detail.serviceNames.isNotEmpty ? detail.serviceNames : summary.serviceNames,
       items: detail.items.isNotEmpty ? detail.items : summary.items,
       billUrl: detail.billUrl ?? summary.billUrl,
+      invoiceId: detail.invoiceId ?? summary.invoiceId,
       serviceInTime: detail.serviceInTime ?? summary.serviceInTime,
       serviceOutTime: detail.serviceOutTime ?? summary.serviceOutTime,
     );
   }
 
   Future<void> _openBill() async {
-    final url = _record.billUrl?.trim();
-    if (url == null || url.isEmpty) {
+    try {
+      await _invoiceService.openBill(_record);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFF43001E),
           content: Text(
-            'Bill is not available for this service yet.',
-            style: GoogleFonts.dmSans(color: Colors.white),
-          ),
-        ),
-      );
-      return;
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red.shade700,
-          content: Text(
-            'Could not open bill.',
+            e.toString().replaceFirst('Exception: ', ''),
             style: GoogleFonts.dmSans(color: Colors.white),
           ),
         ),
